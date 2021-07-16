@@ -1,10 +1,10 @@
 {
   "checksum": "8c736b42459acb0833ea4a36e6c2f934",
-  "root": "typedppxlib@link-dev:./package.json",
+  "root": "typed_ppxlib@link-dev:./package.json",
   "node": {
-    "typedppxlib@link-dev:./package.json": {
-      "id": "typedppxlib@link-dev:./package.json",
-      "name": "typedppxlib",
+    "typed_ppxlib@link-dev:./package.json": {
+      "id": "typed_ppxlib@link-dev:./package.json",
+      "name": "typed_ppxlib",
       "version": "link-dev:./package.json",
       "source": {
         "type": "link-dev",

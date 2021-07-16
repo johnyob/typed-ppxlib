@@ -1,5 +1,5 @@
 {
-  "name": "typedppxlib",
+  "name": "typed_ppxlib",
   "esy": {
     "build": "dune build -p #{self.name}",
     "install": "esy-installer #{self.name}.install"

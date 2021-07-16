@@ -1,16 +1,16 @@
 (library
- (name typedppxlib_ocaml_parsing)
- (public_name typedppxlib.ocaml.parsing)
+ (name typed_ppxlib_ocaml_parsing)
+ (public_name typed_ppxlib.ocaml.parsing)
  (flags
   (:standard
    -w
    -9
    -open
-   Typedppxlib_ocaml_utils
+   Typed_ppxlib_ocaml_utils
    -open
-   Typedppxlib_ocaml_stdlib))
+   Typed_ppxlib_ocaml_stdlib))
  (libraries
   ocaml-compiler-libs.common
   ocaml-migrate-parsetree
-  typedppxlib_ocaml_utils
-  typedppxlib_ocaml_stdlib))
+  typed_ppxlib_ocaml_utils
+  typed_ppxlib_ocaml_stdlib))

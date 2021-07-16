@@ -1,5 +1,5 @@
 module Hooks = struct
-  open Typedppxlib_ocaml_typing
+  open Typed_ppxlib_ocaml_typing
 
   type type_package =
     Env.t ->
@@ -72,8 +72,8 @@ module Hooks = struct
 end
 
 module Transform = struct
-  open Typedppxlib_ocaml_driver
-  open Typedppxlib_ocaml_typing
+  open Typed_ppxlib_ocaml_driver
+  open Typed_ppxlib_ocaml_typing
 
   let env =
     lazy

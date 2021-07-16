@@ -1,4 +1,4 @@
 (library
- (name typedppxlib_ocaml_utils)
- (public_name typedppxlib.ocaml.utils)
+ (name typed_ppxlib_ocaml_utils)
+ (public_name typed_ppxlib.ocaml.utils)
  (libraries ocaml-compiler-libs.common))

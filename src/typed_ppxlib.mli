@@ -1,4 +1,4 @@
-open Typedppxlib_ocaml_typing
+open Typed_ppxlib_ocaml_typing
 module Hooks : sig
   type type_package =
     Env.t ->

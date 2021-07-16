@@ -1,4 +1,4 @@
 (library
- (name typedppxlib)
- (public_name typedppxlib)
- (libraries ppxlib typedppxlib_ocaml_driver typedppxlib_ocaml_typing))
+ (name typed_ppxlib)
+ (public_name typed_ppxlib)
+ (libraries ppxlib typed_ppxlib_ocaml_driver typed_ppxlib_ocaml_typing))
