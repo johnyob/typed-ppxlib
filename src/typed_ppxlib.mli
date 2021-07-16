@@ -9,7 +9,7 @@ module Hooks : sig
     -> Typedtree.module_expr * Types.type_expr list
 
   type type_expect =
-    ?in_function:Warnings.loc * Types.type_expr
+    ?in_function:(Location.t * Types.type_expr)
     -> ?recarg:Typecore.recarg
     -> Env.t
     -> Parsetree.expression
@@ -17,7 +17,7 @@ module Hooks : sig
     -> Typedtree.expression
 
   type type_extension =
-    ?in_function:Warnings.loc * Types.type_expr
+    ?in_function:(Location.t * Types.type_expr)
     -> recarg:Typecore.recarg
     -> Env.t
     -> Parsetree.expression

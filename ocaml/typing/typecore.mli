@@ -223,19 +223,28 @@ val check_recursive_bindings : Env.t -> Typedtree.value_binding list -> unit
 val check_recursive_class_bindings :
   Env.t -> Ident.t list -> Typedtree.class_expr list -> unit
 
-(* typedppxlib *)
+(** See [type_ident] *)
 type recarg =
   | Allowed
   | Required
   | Rejected
 
+(* typedppxlib *)
+
+(* The [in_function] labelled argument is [None] while not typing
+    a function. While typing a function, [in_function] is [Some (fun_loc, fun_typ)]
+    where [fun_loc] is the location of the function and [fun_typ] is the expected type
+    of the function.  
+*)
+(** TODO: Understand the [recarg] labelled argument. *)
 val type_expect_ref : (
-  ?in_function:Warnings.loc * type_expr ->
+  ?in_function:(Location.t * type_expr) ->
   ?recarg:recarg ->
   Env.t ->
   Parsetree.expression -> type_expected -> Typedtree.expression) ref
+
 val type_extension_ref : (
-  ?in_function:Warnings.loc * type_expr ->
+  ?in_function:(Location.t * type_expr) ->
   recarg:recarg ->
   Env.t ->
   Parsetree.expression ->
