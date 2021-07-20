@@ -151,8 +151,8 @@ type class_type_field_acc =
   ; inher : (Path.t * Types.type_expr list) list
   }
 
-val typed_ppxlib_class_expr_ref : (val_env:Env.t -> method_env:Env.t -> Parsetree.extension -> Typedtree.class_expr) ref
-val typed_ppxlib_class_field_ref : 
+val typed_ppxlib_class_expr_extension_ref : (val_env:Env.t -> method_env:Env.t -> Parsetree.extension -> Typedtree.class_expr) ref
+val typed_ppxlib_class_field_extension_ref : 
   (self:Types.type_expr
   -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
   -> vars:
@@ -162,9 +162,9 @@ val typed_ppxlib_class_field_ref :
   -> Parsetree.extension
   -> class_field_acc) ref
 
-val typed_ppxlib_class_type_ref : (env:Env.t -> Parsetree.extension -> Typedtree.class_type) ref
+val typed_ppxlib_class_type_extension_ref : (env:Env.t -> Parsetree.extension -> Typedtree.class_type) ref
 
-val typed_ppxlib_class_type_field_ref : 
+val typed_ppxlib_class_type_field_extension_ref : 
   (env:Env.t
   -> self:Types.type_expr
   -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref

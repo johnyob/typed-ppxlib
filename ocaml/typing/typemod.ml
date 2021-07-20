@@ -115,20 +115,20 @@ exception Error_forward of Location.error
    during type checking. 
 *)
 
-let typed_ppxlib_structure_item_ref = 
+let typed_ppxlib_structure_item_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t -> extension -> Typedtree.structure_item_desc * Types.signature * Env.t
     )
 
-let typed_ppxlib_signature_item_ref = 
+let typed_ppxlib_signature_item_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t -> Parsetree.extension -> Typedtree.signature)
 
-let typed_ppxlib_module_expr_ref = 
+let typed_ppxlib_module_expr_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext)) 
     : env:Env.t -> extension -> Typedtree.module_expr)
 
-let typed_ppxlib_module_type_ref = 
+let typed_ppxlib_module_type_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t -> extension -> Typedtree.module_type)
 
@@ -766,7 +766,7 @@ let rec approx_modtype env smty =
       mty
   | Pmty_extension ext ->
       (* typed_ppxlib *)
-      let ttmodule_type = !typed_ppxlib_module_type_ref ~env ext in
+      let ttmodule_type = !typed_ppxlib_module_type_extension_ref ~env ext in
       ttmodule_type.mty_type
 
 and approx_module_declaration env pmd =
@@ -1228,7 +1228,7 @@ and transl_modtype_aux env smty =
       mkmty (Tmty_typeof tmty) mty env loc smty.pmty_attributes
   | Pmty_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_module_type_ref ~env ext
+      !typed_ppxlib_module_type_extension_ref ~env ext
       
 and transl_signature env sg =
   let names = Signature_names.create () in
@@ -1514,7 +1514,7 @@ and transl_signature env sg =
             mksig (Tsig_attribute x) env loc :: trem, rem, final_env
         | Psig_extension (ext, _attrs) ->
             (* typed_ppxlib *)
-            let s = !typed_ppxlib_signature_item_ref ~env ext in
+            let s = !typed_ppxlib_signature_item_extension_ref ~env ext in
             let (items, types, final_env) = transl_sig s.sig_final_env srem in
             s.sig_items @ items, s.sig_type @ types, final_env
   in
@@ -2108,7 +2108,7 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         mod_loc = smod.pmod_loc }
   | Pmod_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_module_expr_ref ~env ext
+      !typed_ppxlib_module_expr_extension_ref ~env ext
 
 and type_open_decl ?used_slot ?toplevel funct_body names env sod =
   Builtin_attributes.warning_scope sod.popen_attributes
@@ -2454,7 +2454,7 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr =
         Tstr_include incl, sg, new_env
     | Pstr_extension (ext, _attrs) ->
         (* typed_ppxlib *)
-        !typed_ppxlib_structure_item_ref ~env ext 
+        !typed_ppxlib_structure_item_extension_ref ~env ext 
     | Pstr_attribute x ->
         Builtin_attributes.warning_attribute x;
         Tstr_attribute x, [], env

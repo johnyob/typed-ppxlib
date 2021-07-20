@@ -118,11 +118,11 @@ type class_type_field_acc =
   ; inher : (Path.t * Types.type_expr list) list
   }
 
-let typed_ppxlib_class_expr_ref = 
+let typed_ppxlib_class_expr_extension_ref = 
   ref (fun ~val_env:_ ~method_env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : val_env:Env.t -> method_env:Env.t -> Parsetree.extension -> Typedtree.class_expr)
 
-let typed_ppxlib_class_field_ref = 
+let typed_ppxlib_class_field_extension_ref = 
   ref (fun ~self:_ ~methods:_ ~vars:_ ~acc:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : self:Types.type_expr
     -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
@@ -133,12 +133,12 @@ let typed_ppxlib_class_field_ref =
     -> Parsetree.extension
     -> class_field_acc)
 
-let typed_ppxlib_class_type_ref = 
+let typed_ppxlib_class_type_extension_ref = 
   ref (fun ~env:_ ext ->  raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t -> Parsetree.extension -> Typedtree.class_type)
 
 
-let typed_ppxlib_class_type_field_ref = 
+let typed_ppxlib_class_type_field_extension_ref = 
   ref (fun ~env:_ ~self:_ ~methods:_ ~acc:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t
     -> self:Types.type_expr
@@ -530,7 +530,7 @@ and class_type_field_aux env self_type meths
   | Pctf_extension ext ->
       (* typed_ppxlib *)
       let {fields; val_sig; concr_methods; inher} = 
-        !typed_ppxlib_class_type_field_ref 
+        !typed_ppxlib_class_type_field_extension_ref 
         ~env
         ~self:self_type 
         ~methods:meths 
@@ -639,7 +639,7 @@ and class_type_aux env scty =
 
   | Pcty_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_class_type_ref ~env ext
+      !typed_ppxlib_class_type_extension_ref ~env ext
 
 let class_type env scty =
   delayed_meth_specs := [];
@@ -861,7 +861,7 @@ and class_field_aux self_loc cl_num self_type meths vars
   | Pcf_extension ext ->
       (* typed_ppxlib *)
       let { class_env; fields; concr_methods; warn_vals; inher; local_methods; local_vals } = 
-        !typed_ppxlib_class_field_ref
+        !typed_ppxlib_class_field_extension_ref
         ~self:self_type
         ~methods:meths
         ~vars
@@ -1333,7 +1333,7 @@ and class_expr_aux cl_num val_env met_env scl =
          }
   | Pcl_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_class_expr_ref ~val_env ~method_env:met_env ext
+      !typed_ppxlib_class_expr_extension_ref ~val_env ~method_env:met_env ext
 
 (*******************************)
 
