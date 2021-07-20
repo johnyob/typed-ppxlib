@@ -136,3 +136,10 @@ exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
 
 val report_error: Env.t -> formatter -> error -> unit
+
+(* typed_ppxlib *)
+
+val typed_ppxlib_structure_item_ref : (env:Env.t -> Parsetree.extension -> Typedtree.structure_item_desc * Types.signature * Env.t) ref
+val typed_ppxlib_signature_item_ref : (env:Env.t -> Parsetree.extension -> Typedtree.signature) ref
+val typed_ppxlib_module_expr_ref : (env:Env.t -> Parsetree.extension -> Typedtree.module_expr) ref
+val typed_ppxlib_module_type_ref : (env:Env.t -> Parsetree.extension -> Typedtree.module_type) ref

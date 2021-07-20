@@ -128,3 +128,46 @@ val type_open_descr :
   (?used_slot:bool ref ->
    Env.t -> Parsetree.open_description -> Typedtree.open_description * Env.t)
     ref
+
+
+(* typed_ppxlib *)
+
+type class_env = { val_env : Env.t; met_env : Env.t; par_env : Env.t } 
+
+type class_field_acc =
+  { class_env : class_env
+  ; fields : Typedtree.class_field Lazy.t list
+  ; concr_methods : Types.Concr.t
+  ; warn_vals : Types.Concr.t
+  ; inher : (Path.t * Types.type_expr list) list
+  ; local_methods : Types.Concr.t
+  ; local_vals : Types.Concr.t
+  }
+
+type class_type_field_acc =
+  { fields : Typedtree.class_type_field list
+  ; val_sig : (Asttypes.mutable_flag * Asttypes.virtual_flag * Types.type_expr) Types.Vars.t
+  ; concr_methods : Types.Concr.t
+  ; inher : (Path.t * Types.type_expr list) list
+  }
+
+val typed_ppxlib_class_expr_ref : (val_env:Env.t -> method_env:Env.t -> Parsetree.extension -> Typedtree.class_expr) ref
+val typed_ppxlib_class_field_ref : 
+  (self:Types.type_expr
+  -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
+  -> vars:
+        (Ident.t * Asttypes.mutable_flag * Asttypes.virtual_flag * Types.type_expr) Types.Vars.t
+        ref
+  -> acc:class_field_acc
+  -> Parsetree.extension
+  -> class_field_acc) ref
+
+val typed_ppxlib_class_type_ref : (env:Env.t -> Parsetree.extension -> Typedtree.class_type) ref
+
+val typed_ppxlib_class_type_field_ref : 
+  (env:Env.t
+  -> self:Types.type_expr
+  -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
+  -> acc:class_type_field_acc
+  -> Parsetree.extension
+  -> class_type_field_acc) ref

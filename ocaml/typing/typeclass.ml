@@ -98,6 +98,55 @@ type error =
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
 
+(* typed_ppxlib *)
+
+(* TODO: Remove duplicate definitions? *)
+type class_field_acc =
+  { class_env : class_env
+  ; fields : Typedtree.class_field Lazy.t list
+  ; concr_methods : Types.Concr.t
+  ; warn_vals : Types.Concr.t
+  ; inher : (Path.t * Types.type_expr list) list
+  ; local_methods : Types.Concr.t
+  ; local_vals : Types.Concr.t
+  }
+
+type class_type_field_acc =
+  { fields : Typedtree.class_type_field list
+  ; val_sig : (Asttypes.mutable_flag * Asttypes.virtual_flag * Types.type_expr) Types.Vars.t
+  ; concr_methods : Types.Concr.t
+  ; inher : (Path.t * Types.type_expr list) list
+  }
+
+let typed_ppxlib_class_expr_ref = 
+  ref (fun ~val_env:_ ~method_env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : val_env:Env.t -> method_env:Env.t -> Parsetree.extension -> Typedtree.class_expr)
+
+let typed_ppxlib_class_field_ref = 
+  ref (fun ~self:_ ~methods:_ ~vars:_ ~acc:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : self:Types.type_expr
+    -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
+    -> vars:
+        (Ident.t * Asttypes.mutable_flag * Asttypes.virtual_flag * Types.type_expr) Types.Vars.t
+        ref
+    -> acc:class_field_acc
+    -> Parsetree.extension
+    -> class_field_acc)
+
+let typed_ppxlib_class_type_ref = 
+  ref (fun ~env:_ ext ->  raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : env:Env.t -> Parsetree.extension -> Typedtree.class_type)
+
+
+let typed_ppxlib_class_type_field_ref = 
+  ref (fun ~env:_ ~self:_ ~methods:_ ~acc:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : env:Env.t
+    -> self:Types.type_expr
+    -> methods:(Ident.t * Types.type_expr) Types.Meths.t ref
+    -> acc:class_type_field_acc
+    -> Parsetree.extension
+    -> class_type_field_acc)
+
 open Typedtree
 
 let type_open_descr :
@@ -479,7 +528,16 @@ and class_type_field_aux env self_type meths
         val_sig, concr_meths, inher)
 
   | Pctf_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      let {fields; val_sig; concr_methods; inher} = 
+        !typed_ppxlib_class_type_field_ref 
+        ~env
+        ~self:self_type 
+        ~methods:meths 
+        ~acc:{fields; val_sig; concr_methods=concr_meths; inher } 
+        ext 
+      in (fields, val_sig, concr_methods, inher)
+
 
 and class_signature env {pcsig_self=sty; pcsig_fields=sign} =
   let meths = ref Meths.empty in
@@ -580,7 +638,8 @@ and class_type_aux env scty =
       cltyp (Tcty_open (od, clty)) clty.cltyp_type
 
   | Pcty_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      !typed_ppxlib_class_type_ref ~env ext
 
 let class_type env scty =
   delayed_meth_specs := [];
@@ -800,7 +859,15 @@ and class_field_aux self_loc cl_num self_type meths vars
         lazy (mkcf (Tcf_attribute x)) :: fields,
         concr_meths, warn_vals, inher, local_meths, local_vals)
   | Pcf_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      let { class_env; fields; concr_methods; warn_vals; inher; local_methods; local_vals } = 
+        !typed_ppxlib_class_field_ref
+        ~self:self_type
+        ~methods:meths
+        ~vars
+        ~acc:{ class_env; fields; concr_methods=concr_meths; warn_vals; inher; local_methods=local_meths; local_vals }
+        ext
+      in (class_env, fields, concr_methods, warn_vals, inher, local_methods, local_vals) 
 
 (* N.B. the self type of a final object type doesn't contain a dummy method in
    the beginning.
@@ -1265,7 +1332,8 @@ and class_expr_aux cl_num val_env met_env scl =
           cl_attributes = scl.pcl_attributes;
          }
   | Pcl_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      !typed_ppxlib_class_expr_ref ~val_env ~method_env:met_env ext
 
 (*******************************)
 

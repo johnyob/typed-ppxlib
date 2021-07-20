@@ -21,6 +21,8 @@ open Parsetree
 open Types
 open Format
 
+
+
 module String = Misc.Stdlib.String
 
 module Sig_component_kind = struct
@@ -105,6 +107,33 @@ type error =
 
 exception Error of Location.t * Env.t * error
 exception Error_forward of Location.error
+
+
+(* Typed_ppxlib.
+   
+   This section defines the forward declarations of the typed ppxlib hooks, appled to extensions / attributes
+   during type checking. 
+*)
+
+let typed_ppxlib_structure_item_ref = 
+  ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : env:Env.t -> extension -> Typedtree.structure_item_desc * Types.signature * Env.t
+    )
+
+let typed_ppxlib_signature_item_ref = 
+  ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : env:Env.t -> Parsetree.extension -> Typedtree.signature)
+
+let typed_ppxlib_module_expr_ref = 
+  ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext)) 
+    : env:Env.t -> extension -> Typedtree.module_expr)
+
+let typed_ppxlib_module_type_ref = 
+  ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : env:Env.t -> extension -> Typedtree.module_type)
+
+(* Typed_ppxlib. end *)
+
 
 open Typedtree
 
@@ -736,7 +765,9 @@ let rec approx_modtype env smty =
       let (_, mty) = !type_module_type_of_fwd env smod in
       mty
   | Pmty_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      let ttmodule_type = !typed_ppxlib_module_type_ref ~env ext in
+      ttmodule_type.mty_type
 
 and approx_module_declaration env pmd =
   {
@@ -1196,8 +1227,9 @@ and transl_modtype_aux env smty =
       let tmty, mty = !type_module_type_of_fwd env smod in
       mkmty (Tmty_typeof tmty) mty env loc smty.pmty_attributes
   | Pmty_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
-
+      (* typed_ppxlib *)
+      !typed_ppxlib_module_type_ref ~env ext
+      
 and transl_signature env sg =
   let names = Signature_names.create () in
   let rec transl_sig env sg =
@@ -1481,7 +1513,10 @@ and transl_signature env sg =
             let (trem,rem, final_env) = transl_sig env srem in
             mksig (Tsig_attribute x) env loc :: trem, rem, final_env
         | Psig_extension (ext, _attrs) ->
-            raise (Error_forward (Builtin_attributes.error_of_extension ext))
+            (* typed_ppxlib *)
+            let s = !typed_ppxlib_signature_item_ref ~env ext in
+            let (items, types, final_env) = transl_sig s.sig_final_env srem in
+            s.sig_items @ items, s.sig_type @ types, final_env
   in
   let previous_saved_types = Cmt_format.get_saved_types () in
   Builtin_attributes.warning_scope []
@@ -2072,7 +2107,8 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         mod_attributes = smod.pmod_attributes;
         mod_loc = smod.pmod_loc }
   | Pmod_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      (* typed_ppxlib *)
+      !typed_ppxlib_module_expr_ref ~env ext
 
 and type_open_decl ?used_slot ?toplevel funct_body names env sod =
   Builtin_attributes.warning_scope sod.popen_attributes
@@ -2417,7 +2453,8 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr =
         in
         Tstr_include incl, sg, new_env
     | Pstr_extension (ext, _attrs) ->
-        raise (Error_forward (Builtin_attributes.error_of_extension ext))
+        (* typed_ppxlib *)
+        !typed_ppxlib_structure_item_ref ~env ext 
     | Pstr_attribute x ->
         Builtin_attributes.warning_attribute x;
         Tstr_attribute x, [], env

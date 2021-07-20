@@ -189,10 +189,49 @@ type recarg =
   | Required
   | Rejected
 
-(* typedppxlib start *)
-let type_expect_ref = ref (fun ?in_function:_ ?recarg:_ _ -> assert false)
-let type_extension_ref = ref (fun ?in_function:_ ~recarg:_ _ -> assert false)
-(* typedppxlib end*)
+(* Typed_ppxlib.
+
+   This section defines the forward declarations of the typed ppxlib hooks, applied to extensions / attributes during 
+   type checking.
+*)
+
+(* TODO: Remove duplicate pattern *)
+type typed_ppxlib_pattern_extension =
+  { f :
+    'k 'r.
+    'k Typedtree.pattern_category
+    -> no_existentials:existential_restriction option
+    -> env:Env.t ref
+    -> expected:type_expr
+    -> cnt:('k Typedtree.general_pattern -> 'r)
+    -> Parsetree.extension
+    -> 'r
+  }
+
+let typed_ppxlib_expect_ref = ref (fun ?in_function:_ ?recarg:_ _ -> assert false)
+let typed_ppxlib_expression_extension_ref = 
+  ref (fun ?in_function:_ ~recarg:_ ~env:_ ~expected:_ ext -> 
+    raise (Error_forward (Builtin_attributes.error_of_extension ext))
+    : ?in_function:(Location.t * type_expr) ->
+      recarg:recarg ->
+      env:Env.t ->
+      expected:type_expected ->
+      Parsetree.extension ->
+      Typedtree.expression)
+
+let typed_ppxlib_pattern_extension_ref =
+  let f : type k r . 
+    k pattern_category 
+    -> no_existentials:existential_restriction option 
+    -> env:Env.t ref 
+    -> expected:type_expr 
+    -> cnt:(k general_pattern -> r) 
+    -> extension 
+    -> r 
+    = fun  _ ~no_existentials:_ ~env:_ ~expected:_ ~cnt:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext)) in
+  ref ({ f })
+
+(* Typed_ppxlib end*)
 
 let mk_expected ?explanation ty = { ty; explanation; }
 
@@ -1335,8 +1374,8 @@ let rec type_pat
     )
 
 and type_pat_aux
-  : type k r . k pattern_category -> no_existentials:_ -> mode:_ ->
-         env:_ -> _ -> _ -> (k general_pattern -> r) -> r
+  : type k r . k pattern_category -> no_existentials:existential_restriction option -> mode:pattern_checking_mode ->
+         env:Env.t ref -> Parsetree.pattern -> type_expr -> (k general_pattern -> r) -> r
   = fun category ~no_existentials ~mode
       ~env sp expected_ty k ->
   let type_pat category ?(mode=mode) ?(env=env) =
@@ -1866,7 +1905,7 @@ and type_pat_aux
         pat_attributes = sp.ppat_attributes;
       })
   | Ppat_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+     !typed_ppxlib_pattern_extension_ref.f category ~no_existentials ~env ~expected:expected_ty ~cnt:k ext
 
 let type_pat category ?no_existentials ?(mode=Normal)
     ?(lev=get_current_level()) env sp expected_ty =
@@ -2566,7 +2605,7 @@ let rec type_exp ?recarg env sexp =
    In the principal case, [type_expected'] may be at generic_level.
  *)
 
-and type_expect ?in_function ?recarg env = !type_expect_ref ?in_function ?recarg env
+and type_expect ?in_function ?recarg env = !typed_ppxlib_expect_ref ?in_function ?recarg env
 and type_expect' ?in_function ?recarg env sexp ty_expected_explained =
   let previous_saved_types = Cmt_format.get_saved_types () in
   let exp =
@@ -3707,8 +3746,8 @@ and type_expect_
           raise (Error (loc, env, Invalid_extension_constructor_payload))
       end
   | Pexp_extension ext ->
-      (* typedppxlib *)
-      !type_extension_ref ?in_function ~recarg env sexp ty_expected_explained ext
+      (* typed_ppxlib *)
+      !typed_ppxlib_expression_extension_ref ?in_function ~recarg ~env ~expected:ty_expected_explained ext
   | Pexp_unreachable ->
       re { exp_desc = Texp_unreachable;
            exp_loc = loc; exp_extra = [];
@@ -5596,6 +5635,4 @@ let type_exp env e = type_exp env e
 let type_argument env e t1 t2 = type_argument env e t1 t2
 
 (* typedppxlib *)
-let () = type_expect_ref := type_expect'
-let () = type_extension_ref :=
-  fun ?in_function:_ ~recarg:_ _ _ _ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
+let () = typed_ppxlib_expect_ref := type_expect'

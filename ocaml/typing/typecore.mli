@@ -229,7 +229,7 @@ type recarg =
   | Required
   | Rejected
 
-(* typedppxlib *)
+(* typed_ppxlib *)
 
 (* The [in_function] labelled argument is [None] while not typing
     a function. While typing a function, [in_function] is [Some (fun_loc, fun_typ)]
@@ -237,17 +237,35 @@ type recarg =
     of the function.  
 *)
 (** TODO: Understand the [recarg] labelled argument. *)
-val type_expect_ref : (
+val typed_ppxlib_expect_ref : (
   ?in_function:(Location.t * type_expr) ->
   ?recarg:recarg ->
   Env.t ->
   Parsetree.expression -> type_expected -> Typedtree.expression) ref
 
-val type_extension_ref : (
+
+
+(* TODO: Remove duplicate pattern *)
+type typed_ppxlib_pattern_extension =
+  { f :
+    'k 'r.
+    'k Typedtree.pattern_category
+    -> no_existentials:existential_restriction option
+    -> env:Env.t ref
+    -> expected:type_expr
+    -> cnt:('k Typedtree.general_pattern -> 'r)
+    -> Parsetree.extension
+    -> 'r
+  }
+
+val typed_ppxlib_expression_extension_ref : (
   ?in_function:(Location.t * type_expr) ->
   recarg:recarg ->
-  Env.t ->
-  Parsetree.expression ->
-  type_expected ->
+  env:Env.t ->
+  expected:type_expected ->
   Parsetree.extension ->
   Typedtree.expression) ref
+
+
+val typed_ppxlib_pattern_extension_ref : typed_ppxlib_pattern_extension ref
+
