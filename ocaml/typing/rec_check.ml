@@ -204,6 +204,12 @@ let classify_expression : Typedtree.expression -> sd =
     | Texp_override _
     | Texp_letop _ ->
         Dynamic
+    (* [Typed_ppxlib] 
+       The expanded extension expression is unknown (currently)
+       => it's size cannot be inferred statically.
+    *)
+    | Texp_extension _ ->
+        Dynamic
   and classify_value_bindings rec_flag env bindings =
     (* We use a non-recursive classification, classifying each
         binding with respect to the old environment
@@ -385,32 +391,64 @@ sig
   (** Remove all the identifiers of a list from an environment. *)
 
   val equal : t -> t -> bool
+
+  val infinite : Mode.t -> t
 end = struct
   module M = Map.Make(Ident)
 
   (** A "t" maps each rec-bound variable to an access status *)
-  type t = Mode.t M.t
+  type t = 
+    | Finite of Mode.t M.t
+    (* [Typed_ppxlib] 
 
-  let equal = M.equal Mode.equal
+       The addition of the extensions to the typed tree
+       makes inferring the mode of a recursive environment tricky, 
+       since the extension may be expanded into any expression, 
+       using modes [Ignore] to [Dynamic] (it is unknown). 
 
-  let find (id: Ident.t) (tbl: t) =
-    try M.find id tbl with Not_found -> Ignore
+       So we define an additional context type
+       denoted [G_ppx] w/ a defined lower bound of the mode
+       for all variables in the context (usually [Dynamic])
+    *)
+    | Infinite of Mode.t
 
-  let empty = M.empty
+  let equal env1 env2 = 
+    match env1, env2 with
+    | Finite tbl1, Finite tbl2 -> M.equal Mode.equal tbl1 tbl2
+    | Infinite m1, Infinite m2 -> Mode.equal m1 m2
+    | _, _ -> false
 
-  let join (x: t) (y: t) =
-    M.fold
-      (fun (id: Ident.t) (v: Mode.t) (tbl: t) ->
-         let v' = find id tbl in
-         M.add id (Mode.join v v') tbl)
-      x y
+  let find id env =
+    match env with
+    | Finite tbl -> 
+        (try M.find id tbl with Not_found -> Ignore)
+    | Infinite m -> m
+  let empty = Finite M.empty
+
+  let join env1 env2 = 
+    match (env1, env2) with
+    | Finite tbl1, Finite tbl2 -> 
+      let tbl =
+        M.fold
+          (fun id m tbl ->
+            let m' = try M.find id tbl with Not_found -> Ignore in
+            M.add id (Mode.join m m') tbl) 
+            tbl1 tbl2 
+      in Finite tbl
+    | Infinite m1, Infinite m2 -> Infinite (Mode.join m1 m2)
+    | Finite tbl, Infinite m 
+    | Infinite m, Finite tbl ->
+        let m' = M.fold (fun _ m m' -> Mode.join m m') tbl Return in
+        Infinite (Mode.join m' m)
 
   let join_list li = List.fold_left join empty li
 
-  let compose m env =
-    M.map (Mode.compose m) env
+  let compose m env = 
+    match env with
+    | Finite tbl -> Finite (M.map (Mode.compose m) tbl)
+    | Infinite m' -> Infinite (Mode.compose m m')
 
-  let single id mode = M.add id mode empty
+  let single id mode = Finite (M.add id mode M.empty)
 
   let unguarded env li =
     List.filter (fun id -> Mode.rank (find id env) > Mode.rank Guard) li
@@ -418,12 +456,19 @@ end = struct
   let dependent env li =
     List.filter (fun id -> Mode.rank (find id env) > Mode.rank Ignore) li
 
-  let remove = M.remove
+  let remove id env = 
+    match env with
+    | Finite tbl -> Finite (M.remove id tbl)
+    | _ -> env
 
   let take id env = (find id env, remove id env)
 
-  let remove_list l env =
-    List.fold_left (fun env id -> M.remove id env) env l
+  let remove_list l env = List.fold_left (fun env id -> remove id env) env l
+
+  (* [Typed_ppxlib]
+     A function to define an infinite context
+  *)
+  let infinite m = Infinite m
 end
 
 let remove_pat pat env =
@@ -495,6 +540,9 @@ let join : term_judg list -> term_judg =
   fun li m -> Env.join_list (List.map (fun f -> f m) li)
 
 let empty = fun _ -> Env.empty
+
+(* [Typed_ppxlib] *)
+let extension = fun _ -> Env.infinite Dereference
 
 (* A judgment [judg] takes a mode from the context as input, and
    returns an environment. The judgment [judg << m], given a mode [m']
@@ -818,6 +866,10 @@ let rec expression : Typedtree.expression -> term_judg =
       path pth << Dereference
     | Texp_open (od, e) ->
       open_declaration od >> expression e
+    (* [Typed_ppxlib] *)
+    | Texp_extension _ext ->
+      extension
+      
 
 and binding_op : Typedtree.binding_op -> term_judg =
   fun bop ->
@@ -840,6 +892,9 @@ and class_field : Typedtree.class_field -> term_judg =
       expression e << Dereference
     | Tcf_attribute _ ->
       empty
+    (* [Typed_ppxlib] *)
+    | Tcf_extension _ext ->
+      extension
 
 and class_field_kind : Typedtree.class_field_kind -> term_judg =
   fun cfk -> match cfk with
@@ -883,6 +938,9 @@ and modexp : Typedtree.module_expr -> term_judg =
       coercion coe (fun m -> modexp mexp << m)
     | Tmod_unpack (e, _) ->
       expression e
+    (* [Typed_ppxlib] *)
+    | Tmod_extension _ext ->
+      extension
 
 
 (* G |- pth : m *)
@@ -982,6 +1040,9 @@ and structure_item : Typedtree.structure_item -> bind_judg =
     | Tstr_include { incl_mod = mexp; incl_type = mty; _ } ->
       let included_ids = List.map Types.signature_item_id mty in
       Env.join (modexp mexp m) (Env.remove_list included_ids env)
+    (* [Typed_ppxlib] *)
+    | Tstr_extension (_ext, _attrs) ->
+      Env.infinite Dereference
 
 (* G |- module M = E : m -| G *)
 and module_binding : (Ident.t option * Typedtree.module_expr) -> bind_judg =
@@ -1044,6 +1105,9 @@ and class_expr : Typedtree.class_expr -> term_judg =
         class_expr ce
     | Tcl_open (_, ce) ->
         class_expr ce
+    (* [Typed_ppxlib] *)
+    | Tcl_extension _ext ->
+        extension
 
 and extension_constructor : Typedtree.extension_constructor -> term_judg =
   fun ec -> match ec.ext_kind with
@@ -1201,6 +1265,12 @@ and is_destructuring_pattern : type k . k general_pattern -> bool =
     | Tpat_exception _ -> false
     | Tpat_or (l,r,_) ->
         is_destructuring_pattern l || is_destructuring_pattern r
+    (* [Typed_ppxlib] 
+       An extension may be a destructing pattern.
+       We take the strong assumption that it is. 
+    *)
+    | Tpat_extension _ext ->
+        true
 
 let is_valid_recursive_expression idlist expr =
   let ty = expression expr Return in
@@ -1252,6 +1322,9 @@ let is_valid_class_expr idlist ce =
         class_expr mode ce
       | Tcl_open (_, ce) ->
         class_expr mode ce
+      (* [Typed_ppxlib] *)
+      | Tcl_extension _ext ->
+        Env.infinite Dereference
   in
   match Env.unguarded (class_expr Return ce) idlist with
   | [] -> true
