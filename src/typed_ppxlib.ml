@@ -26,13 +26,13 @@ open Ppxlib
 
 let registered = ref false
 
-let register ?impl name =
+let register ?impl _name =
   if not !registered
   then (
     registered := true;
     Driver.register_transformation
       ~instrument:(Driver.Instrument.make ~position:After Transform.transform)
-      ("typed_ppxlib@" ^ name));
+      ("typed_ppxlib"));
   match impl with
   | Some impl -> Transform.register impl
   | None -> () 

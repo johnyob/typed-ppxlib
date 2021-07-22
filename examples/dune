@@ -1,0 +1,18 @@
+(executable
+ (name example)
+ (modules Example)
+ (preprocess
+  (staged_pps type_of)))
+
+(library
+ (name type_of)
+ (modules Type_of)
+ (libraries typed_ppxlib)
+ (kind ppx_rewriter))
+
+(rule
+ (alias runtest)
+ (deps
+  (:exe ./example.exe))
+ (action
+  (run %{exe})))
