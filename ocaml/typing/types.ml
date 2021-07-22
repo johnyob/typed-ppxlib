@@ -349,6 +349,8 @@ type module_type =
   | Mty_signature of signature
   | Mty_functor of functor_parameter * module_type
   | Mty_alias of Path.t
+  (* [Typed_ppxlib] *)
+  | Mty_extension
 
 and functor_parameter =
   | Unit
