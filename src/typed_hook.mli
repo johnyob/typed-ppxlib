@@ -1,1 +1,0 @@
-include Typed_hook_intf.Intf (** @inline *)
