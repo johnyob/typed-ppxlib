@@ -115,7 +115,7 @@ exception Error_forward of Location.error
    during type checking. 
 *)
 
-let typed_ppxlib_structure_item_extension_ref = 
+(* let typed_ppxlib_structure_item_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
     : env:Env.t -> extension -> Typedtree.structure_item_desc * Types.signature * Env.t
     )
@@ -130,7 +130,7 @@ let typed_ppxlib_module_expr_extension_ref =
 
 let typed_ppxlib_module_type_extension_ref = 
   ref (fun ~env:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext))
-    : env:Env.t -> extension -> Typedtree.module_type)
+    : env:Env.t -> extension -> Typedtree.module_type) *)
 
 (* Typed_ppxlib. end *)
 
@@ -764,10 +764,9 @@ let rec approx_modtype env smty =
   | Pmty_typeof smod ->
       let (_, mty) = !type_module_type_of_fwd env smod in
       mty
-  | Pmty_extension ext ->
-      (* typed_ppxlib *)
-      let ttmodule_type = !typed_ppxlib_module_type_extension_ref ~env ext in
-      ttmodule_type.mty_type
+  | Pmty_extension _ext ->
+      (* [Typed_ppxlib] *)
+      Mty_extension
 
 and approx_module_declaration env pmd =
   {
@@ -1228,7 +1227,7 @@ and transl_modtype_aux env smty =
       mkmty (Tmty_typeof tmty) mty env loc smty.pmty_attributes
   | Pmty_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_module_type_extension_ref ~env ext
+      mkmty (Tmty_extension ext) (Mty_extension) env loc smty.pmty_attributes
       
 and transl_signature env sg =
   let names = Signature_names.create () in
@@ -1512,11 +1511,11 @@ and transl_signature env sg =
             Builtin_attributes.warning_attribute x;
             let (trem,rem, final_env) = transl_sig env srem in
             mksig (Tsig_attribute x) env loc :: trem, rem, final_env
-        | Psig_extension (ext, _attrs) ->
-            (* typed_ppxlib *)
-            let s = !typed_ppxlib_signature_item_extension_ref ~env ext in
-            let (items, types, final_env) = transl_sig s.sig_final_env srem in
-            s.sig_items @ items, s.sig_type @ types, final_env
+        | Psig_extension (ext, attrs) ->
+            (* [Typed_ppxlib] *)
+            let (trem,rem, final_env) = transl_sig env srem in
+            mksig (Tsig_extension (ext, attrs)) env loc :: trem, rem, final_env
+
   in
   let previous_saved_types = Cmt_format.get_saved_types () in
   Builtin_attributes.warning_scope []
@@ -1673,6 +1672,8 @@ let rec closed_modtype env = function
             Env.add_module ~arg:true id Mp_present param env
       in
       closed_modtype env body
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> true
 
 and closed_signature_item env = function
     Sig_value(_id, desc, _) -> Ctype.closed_schema env desc.val_type
@@ -1863,7 +1864,8 @@ and package_constraints env loc mty constrs =
     match Mtype.scrape env mty with
     | Mty_signature sg ->
         Mty_signature (package_constraints_sig env loc sg constrs)
-    | Mty_functor _ | Mty_alias _ -> assert false
+    (* [Typed_ppxlib] *)
+    | Mty_functor _ | Mty_alias _ | Mty_extension -> assert false
     | Mty_ident p -> raise(Error(loc, env, Cannot_scrape_package_type p))
   end
 
@@ -2107,8 +2109,14 @@ and type_module_aux ~alias sttn funct_body anchor env smod =
         mod_attributes = smod.pmod_attributes;
         mod_loc = smod.pmod_loc }
   | Pmod_extension ext ->
-      (* typed_ppxlib *)
-      !typed_ppxlib_module_expr_extension_ref ~env ext
+      (* [Typed_ppxlib] *)
+      { mod_desc = Tmod_extension ext;
+        mod_type = Mty_extension;
+        mod_env = env;
+        mod_attributes = smod.pmod_attributes;
+        mod_loc = smod.pmod_loc 
+      }
+
 
 and type_open_decl ?used_slot ?toplevel funct_body names env sod =
   Builtin_attributes.warning_scope sod.popen_attributes
@@ -2452,9 +2460,9 @@ and type_structure ?(toplevel = false) funct_body anchor env sstr =
           }
         in
         Tstr_include incl, sg, new_env
-    | Pstr_extension (ext, _attrs) ->
+    | Pstr_extension (ext, attrs) ->
         (* typed_ppxlib *)
-        !typed_ppxlib_structure_item_extension_ref ~env ext 
+        Tstr_extension (ext, attrs), [], env
     | Pstr_attribute x ->
         Builtin_attributes.warning_attribute x;
         Tstr_attribute x, [], env
@@ -2499,6 +2507,8 @@ let rec normalize_modtype = function
   | Mty_alias _ -> ()
   | Mty_signature sg -> normalize_signature sg
   | Mty_functor(_param, body) -> normalize_modtype body
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> ()
 
 and normalize_signature sg = List.iter normalize_signature_item sg
 

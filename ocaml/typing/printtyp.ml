@@ -1718,6 +1718,8 @@ let rec tree_of_modtype ?(ellipsis=false) = function
       Omty_functor (param, res)
   | Mty_alias p ->
       Omty_alias (tree_of_path Module p)
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> Omty_extension
 
 and tree_of_signature sg =
   wrap_env (fun env -> env) (tree_of_signature_rec !printing_env false) sg

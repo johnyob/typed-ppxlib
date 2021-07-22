@@ -437,6 +437,8 @@ and module_components_repr =
 and module_components_failure =
   | No_components_abstract
   | No_components_alias of Path.t
+  (* [Typed_ppxlib] *)
+  | No_components_extension
 
 and structure_components = {
   mutable comp_values: value_data NameMap.t;
@@ -534,6 +536,8 @@ type lookup_error =
   | Generative_used_as_applicative of Longident.t
   | Illegal_reference_to_recursive_module
   | Cannot_scrape_alias of Longident.t * Path.t
+  (* [Typed_ppxlib] *)
+  | Cannot_lookup_extension
 
 type error =
   | Missing_module of Location.t * Path.t * Path.t
@@ -1664,6 +1668,7 @@ let rec components_of_module_maker
           fcomp_subst_cache = Hashtbl.create 17 })
   | Mty_ident _ -> Error No_components_abstract
   | Mty_alias p -> Error (No_components_alias p)
+  | Mty_extension -> Error (No_components_extension)
 
 (* Insertion of bindings by identifier + path *)
 
@@ -2114,7 +2119,11 @@ let read_signature modname filename =
   let md = EnvLazy.force subst_modtype_maker mda.mda_declaration in
   match md.md_type with
   | Mty_signature sg -> sg
-  | Mty_ident _ | Mty_functor _ | Mty_alias _ -> assert false
+  (* [Typed_ppxlib] 
+     Extenstion types cannot be found in 
+     files
+  *)
+  | Mty_ident _ | Mty_functor _ | Mty_alias _ | Mty_extension -> assert false
 
 let is_identchar_latin1 = function
   | 'A'..'Z' | 'a'..'z' | '_' | '\192'..'\214' | '\216'..'\246'
@@ -2471,6 +2480,9 @@ and lookup_structure_components ~errors ~use ~loc lid env =
       may_lookup_error errors loc env (Abstract_used_as_structure lid)
   | Error (No_components_alias p) ->
       may_lookup_error errors loc env (Cannot_scrape_alias(lid, p))
+  (* [Typed_ppxlib] *)
+  | Error No_components_extension ->
+      may_lookup_error errors loc env (Cannot_lookup_extension)
 
 and lookup_functor_components ~errors ~use ~loc lid env =
   let path, comps = lookup_module_components ~errors ~use ~loc lid env in
@@ -2487,6 +2499,9 @@ and lookup_functor_components ~errors ~use ~loc lid env =
       may_lookup_error errors loc env (Abstract_used_as_functor lid)
   | Error (No_components_alias p) ->
       may_lookup_error errors loc env (Cannot_scrape_alias(lid, p))
+  (* [Typed_ppxlib] *)
+  | Error No_components_extension ->
+    may_lookup_error errors loc env (Cannot_lookup_extension)
 
 and lookup_module ~errors ~use ~loc lid env =
   match lid with
@@ -3196,6 +3211,9 @@ let report_lookup_error _loc env ppf = function
       fprintf ppf
         "The module %a is an alias for module %a, which %s"
         !print_longident lid !print_path p cause
+  (* [Typed_ppxlib] *)
+  | Cannot_lookup_extension ->
+      fprintf ppf "@[Cannot lookup an extension until it is expanded@]"
 
 let report_error ppf = function
   | Missing_module(_, path1, path2) ->

@@ -168,6 +168,7 @@ type lookup_error =
   | Generative_used_as_applicative of Longident.t
   | Illegal_reference_to_recursive_module
   | Cannot_scrape_alias of Longident.t * Path.t
+  | Cannot_lookup_extension
 
 val lookup_error: Location.t -> t -> lookup_error -> 'a
 

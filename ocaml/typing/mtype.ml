@@ -191,6 +191,8 @@ let rec nondep_mty_with_presence env va ids pres mty =
                     nondep_mty res_env va ids res)
       in
       pres, mty
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> pres, mty
 
 and nondep_mty env va ids mty =
   snd (nondep_mty_with_presence env va ids Mp_present mty)
@@ -290,6 +292,8 @@ let rec type_paths env p mty =
   | Mty_alias _ -> []
   | Mty_signature sg -> type_paths_sig env p sg
   | Mty_functor _ -> []
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> []
 
 and type_paths_sig env p sg =
   match sg with
@@ -315,6 +319,8 @@ let rec no_code_needed_mod env pres mty =
       | Mty_signature sg -> no_code_needed_sig env sg
       | Mty_functor _ -> false
       | Mty_alias _ -> false
+      (* [Typed_ppxlib] *)
+      | Mty_extension -> false
     end
 
 and no_code_needed_sig env sg =
@@ -351,6 +357,8 @@ let rec contains_type env = function
       contains_type env body
   | Mty_alias _ ->
       ()
+  (* [Typed_ppxlib] *)
+  | Mty_extension -> ()
 
 and contains_type_sig env = List.iter (contains_type_item env)
 
