@@ -48,7 +48,6 @@ type error =
   | Not_an_object of type_expr
 
 exception Error of Location.t * Env.t * error
-exception Error_forward of Location.error
 
 (** Map indexed by type variable names. *)
 module TyVarMap = Misc.Stdlib.String.Map
@@ -521,8 +520,11 @@ and transl_type_aux env policy styp =
             pack_fields = ptys;
             pack_txt = p;
            }) ty
+  (* [Typed_ppxlib] *)
   | Ptyp_extension ext ->
-      raise (Error_forward (Builtin_attributes.error_of_extension ext))
+      let ty = newvar ()
+      in
+      ctyp (Ttyp_extension ext) ty
 
 and transl_poly_type env policy t =
   transl_type env policy (Ast_helper.Typ.force_poly t)
@@ -807,8 +809,6 @@ let () =
     (function
       | Error (loc, env, err) ->
         Some (Location.error_of_printer ~loc (report_error env) err)
-      | Error_forward err ->
-        Some err
       | _ ->
         None
     )
