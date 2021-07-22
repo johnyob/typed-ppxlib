@@ -48,6 +48,8 @@ module Simple : sig
         (Longident.t loc * label_description * pattern) list * closed_flag
     | `Array of pattern list
     | `Lazy of pattern
+    (* [Typed_ppxlib] *)
+    | `Extension of extension
   ]
   type pattern = view pattern_data
 
@@ -91,6 +93,8 @@ module Head : sig
              hence the (unit -> ...) delay *)
     | Array of int
     | Lazy
+    (* [Typed_ppxlib] *)
+    | Extension of extension
 
   type t = desc pattern_data
 

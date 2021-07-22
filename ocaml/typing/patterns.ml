@@ -60,6 +60,8 @@ module Simple = struct
         (Longident.t loc * label_description * pattern) list * closed_flag
     | `Array of pattern list
     | `Lazy of pattern
+    (* [Typed_ppxlib] *)
+    | `Extension of extension
   ]
 
   type pattern = view pattern_data
@@ -104,6 +106,8 @@ module General = struct
     | Tpat_array ps -> `Array ps
     | Tpat_or (p, q, row_desc) -> `Or (p, q, row_desc)
     | Tpat_lazy p -> `Lazy p
+    (* [Typed_ppxlib] *)
+    | Tpat_extension ext -> `Extension ext
 
   let view p : pattern =
     { p with pat_desc = view_desc p.pat_desc }
@@ -123,6 +127,8 @@ module General = struct
     | `Array ps -> Tpat_array ps
     | `Or (p, q, row_desc) -> Tpat_or (p, q, row_desc)
     | `Lazy p -> Tpat_lazy p
+    (* [Typed_ppxlib] *)
+    | `Extension ext -> Tpat_extension ext
 
   let erase p : Typedtree.pattern =
     { p with pat_desc = erase_desc p.pat_desc }
@@ -149,6 +155,8 @@ module Head : sig
           type_row : unit -> row_desc; }
     | Array of int
     | Lazy
+    (* [Typed_ppxlib] *)
+    | Extension of extension
 
   type t = desc pattern_data
 
@@ -176,6 +184,8 @@ end = struct
              hence the (unit -> ...) delay *)
     | Array of int
     | Lazy
+    (* [Typed_ppxlib] *)
+    | Extension of extension
 
   type t = desc pattern_data
 
@@ -207,6 +217,9 @@ end = struct
           Record lbls, pats
       | `Lazy p ->
           Lazy, [p]
+      (* [Typed_ppxlib] *)
+      | `Extension ext ->
+          Extension ext, []
     in
     let desc, pats = deconstruct_desc q.pat_desc in
     { q with pat_desc = desc }, pats
@@ -220,6 +233,8 @@ end = struct
       | Record l -> List.length l
       | Variant { has_arg; _ } -> if has_arg then 1 else 0
       | Lazy -> 1
+      (* [Typed_ppxlib] *)
+      | Extension _ -> 0
 
   let to_omega_pattern t =
     let pat_desc =
@@ -244,6 +259,8 @@ end = struct
             ) lbls
           in
           Tpat_record (lst, Closed)
+      (* [Typed_ppxlib] *)
+      | Extension ext -> Tpat_extension ext
     in
     { t with
       pat_desc;

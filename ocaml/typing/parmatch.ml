@@ -149,11 +149,22 @@ let all_coherent column =
     | Variant _, Variant _
     | Array _, Array _
     | Lazy, Lazy -> true
+    (* [Typed_ppxlib]. 
+       We define an extension to be coherent with any head, since
+       once expanded, the coherency check will be reperformed during 
+       the second typing pass. 
+    *)
+    | _, Extension _
+    | Extension _, _ -> true
     | _, _ -> false
   in
   match
     List.find
       (function
+      (* [Typed_ppxlib]. 
+         While an extension is coherent w/ any pattern (since we check coherency on a later pass),
+         it may be expanded to a discriminator.
+      *)
        | { pat_desc = Any } -> false
        | _ -> true)
       column
@@ -228,6 +239,9 @@ let first_column simplified_matrix =
    may_compat p q --->   a safe approximation of possible compat,
                          for compilation
 
+  [Typed_ppxlib].
+  An extension is not compatable w/ any pattern (except the omega pattern _). 
+  This is because the extension may be expanded into a discriminating patgtern.
 *)
 
 
@@ -279,20 +293,25 @@ module Compat
     end) = struct
 
   let rec compat p q = match p.pat_desc,q.pat_desc with
-(* Variables match any value *)
+  (* Variables match any value *)
   | ((Tpat_any|Tpat_var _),_)
   | (_,(Tpat_any|Tpat_var _)) -> true
-(* Structural induction *)
+  (* [Typed_ppxlib].
+     Extensions match no values (since it is unknown)
+  *)
+  | (Tpat_extension _, _)
+  | (_, Tpat_extension _) -> false
+  (* Structural induction *)
   | Tpat_alias (p,_,_),_      -> compat p q
   | _,Tpat_alias (q,_,_)      -> compat p q
   | Tpat_or (p1,p2,_),_ ->
       (compat p1 q || compat p2 q)
   | _,Tpat_or (q1,q2,_) ->
       (compat p q1 || compat p q2)
-(* Constructors, with special case for extension *)
+  (* Constructors, with special case for extension *)
   | Tpat_construct (_, c1,ps1), Tpat_construct (_, c2,ps2) ->
       Constr.equal c1 c2 && compats ps1 ps2
-(* More standard stuff *)
+  (* More standard stuff *)
   | Tpat_variant(l1,op1, _), Tpat_variant(l2,op2,_) ->
       l1=l2 && ocompat op1 op2
   | Tpat_constant c1, Tpat_constant c2 ->
@@ -366,6 +385,11 @@ let simple_match d h =
   | Tuple len1, Tuple len2
   | Array len1, Array len2 -> len1 = len2
   | _, Any -> true
+  (* [Typed_ppxlib].
+     A discriminating pattern [d] cannot be known whether it matches
+     and extension pattern => return false. 
+  *)
+  | _, Extension _ -> false
   | _, _ -> false
 
 
@@ -392,6 +416,8 @@ let simple_match_args discr head args =
   let open Patterns.Head in
   match head.pat_desc with
   | Constant _ -> []
+  (* [Typed_ppxlib] *)
+  | Extension _ -> []
   | Construct _
   | Variant _
   | Tuple _
@@ -408,6 +434,8 @@ let simple_match_args discr head args =
       | Tuple len -> Patterns.omegas len
       | Variant { has_arg = false }
       | Any
+      (* [Typed_ppxlib] *)
+      | Extension _
       | Constant _ -> []
       end
 
@@ -445,7 +473,11 @@ let discr_pat q pss =
     | ((head, _), _) :: rows ->
       match head.pat_desc with
       | Any -> refine_pat acc rows
-      | Tuple _ | Lazy -> head
+      (* [Typed_ppxlib]. 
+         If we reach an extension, we give up 
+         (since it could compile to a tuple, etc)
+      *)
+      | Tuple _ | Extension _ | Lazy -> head
       | Record lbls ->
         (* N.B. we could make this case "simpler" by refining the record case
            using [all_record_args].
@@ -471,7 +503,7 @@ let discr_pat q pss =
      [Any] to start with, we're not going to be able refine at all. So
      there's no point going over the matrix. *)
   | Any | Record _ -> refine_pat q pss
-  | _ -> q
+  | _ -> q (* [Typed_ppxlib]. This covers extensions as well. *)
 
 (*
    In case a matching value is found, set actual arguments
@@ -533,7 +565,8 @@ let do_set_args ~erase_mutable q r = match q with
     make_pat
       (Tpat_array args) q.pat_type q.pat_env::
     rest
-| {pat_desc=Tpat_constant _|Tpat_any} ->
+(* [Typed_ppxlib] *)
+| {pat_desc=Tpat_constant _ | Tpat_any | Tpat_extension _ } ->
     q::r (* case any is used in matching.ml *)
 | _ -> fatal_error "Parmatch.set_args"
 
@@ -782,6 +815,10 @@ let full_match closing env =  match env with
   | Tuple _
   | Record _
   | Lazy -> true
+  (* [Typed_ppxlib] 
+     An extension is a discriminating head
+  *)
+  | Extension _ -> true
 
 (* Written as a non-fragile matching, PR#7451 originated from a fragile matching
    below. *)
@@ -798,6 +835,10 @@ let should_extend ext env = match ext with
       | Construct {cstr_tag=(Cstr_extension _)} -> false
       | Constant _ | Tuple _ | Variant _ | Record _ | Array _ | Lazy -> false
       | Any -> assert false
+      (* [Typed_ppxlib] 
+         Cannot extend an extension
+      *)
+      | Extension _ -> false
       end
 end
 
@@ -1079,6 +1120,11 @@ let rec has_instance p = match p.pat_desc with
   | Tpat_record (lps,_) -> has_instances (List.map (fun (_,_,x) -> x) lps)
   | Tpat_lazy p
     -> has_instance p
+  (* [Typed_ppxlib] 
+     We assume a extended pattern does have value instances, this
+     is determined once expanded on the 2nd type check pass. 
+  *)
+  | Tpat_extension _ -> true
 
 and has_instances = function
   | [] -> true
@@ -1920,6 +1966,9 @@ module Conv = struct
           mkpat (Ppat_array (List.map loop lst))
       | Tpat_lazy p ->
           mkpat (Ppat_lazy (loop p))
+      (* [Typed_ppxlib] *)
+      | Tpat_extension ext ->
+          mkpat (Ppat_extension ext)
     in
     let ps = loop typed in
     (ps, constrs, labels)
@@ -2048,6 +2097,8 @@ let rec collect_paths_from_pat r p = match p.pat_desc with
 | Tpat_lazy p
     ->
     collect_paths_from_pat r p
+(* [Typed_ppxlib] *)
+| Tpat_extension _ -> r
 
 
 (*
@@ -2184,6 +2235,9 @@ let inactive ~partial pat =
               ldps
         | Tpat_or (p,q,_) ->
             loop p && loop q
+        (* [Typed_ppxlib] *)
+        | Tpat_extension _ext ->
+            false
       in
       loop pat
   end
