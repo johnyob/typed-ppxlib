@@ -59,24 +59,42 @@ type iterator =
     value_bindings: iterator -> (rec_flag * value_binding list) -> unit;
     value_description: iterator -> value_description -> unit;
     with_constraint: iterator -> with_constraint -> unit;
+    (* [Typed_ppxlib] *)
+    extension: iterator -> extension -> unit;
+    attribute: iterator -> attribute -> unit;
+    attributes: iterator -> attribute list -> unit;
   }
+
+(* [Typed_ppxlib] *)
+
+let extension _sub _ext = ()
+let attribute _sub _attr = ()
+let attributes sub attrs = List.iter (sub.attribute sub) attrs
+
 
 let structure sub {str_items; str_final_env; _} =
   List.iter (sub.structure_item sub) str_items;
   sub.env sub str_final_env
 
 let class_infos sub f x =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub x.ci_attributes;
   List.iter (fun (ct, _) -> sub.typ sub ct) x.ci_params;
   f x.ci_expr
 
 let module_type_declaration sub {mtd_type; _} =
   Option.iter (sub.module_type sub) mtd_type
 
-let module_declaration sub {md_type; _} =
+let module_declaration sub {md_type; md_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub md_attributes;
   sub.module_type sub md_type
 let module_substitution _ _ = ()
 
-let include_infos f {incl_mod; _} = f incl_mod
+let include_infos sub f {incl_mod; incl_attributes; _} = 
+  (* [Typed_ppxlib] *)
+  sub.attributes sub incl_attributes;
+  f incl_mod
 
 let class_type_declaration sub x =
   class_infos sub (sub.class_type sub) x
@@ -100,19 +118,31 @@ let structure_item sub {str_desc; str_env; _} =
       List.iter (fun (cls,_) -> sub.class_declaration sub cls) list
   | Tstr_class_type list ->
       List.iter (fun (_, _, cltd) -> sub.class_type_declaration sub cltd) list
-  | Tstr_include incl -> include_infos (sub.module_expr sub) incl
+  | Tstr_include incl -> include_infos sub (sub.module_expr sub) incl
   | Tstr_open od -> sub.open_declaration sub od
-  | Tstr_attribute _ -> ()
+  (* [Typed_ppxlib] *)
+  | Tstr_attribute attr -> sub.attribute sub attr
+  | Tstr_extension (ext, attrs) ->
+      sub.attributes sub attrs;
+      sub.extension sub ext
 
-let value_description sub x = sub.typ sub x.val_desc
+let value_description sub x = 
+  (* [Typed_ppxlib] *)
+  sub.attributes sub x.val_attributes;
+  sub.typ sub x.val_desc
 
-let label_decl sub {ld_type; _} = sub.typ sub ld_type
+let label_decl sub {ld_type; ld_attributes; _} = 
+  (* [Typed_ppxlib] *)
+  sub.attributes sub ld_attributes;
+  sub.typ sub ld_type
 
 let constructor_args sub = function
   | Cstr_tuple l -> List.iter (sub.typ sub) l
   | Cstr_record l -> List.iter (label_decl sub) l
 
-let constructor_decl sub {cd_args; cd_res; _} =
+let constructor_decl sub {cd_args; cd_res; cd_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub cd_attributes;
   constructor_args sub cd_args;
   Option.iter (sub.typ sub) cd_res
 
@@ -122,7 +152,9 @@ let type_kind sub = function
   | Ttype_record list -> List.iter (label_decl sub) list
   | Ttype_open -> ()
 
-let type_declaration sub {typ_cstrs; typ_kind; typ_manifest; typ_params; _} =
+let type_declaration sub {typ_cstrs; typ_kind; typ_manifest; typ_params; typ_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub typ_attributes;
   List.iter
     (fun (c1, c2, _) ->
       sub.typ sub c1;
@@ -134,14 +166,20 @@ let type_declaration sub {typ_cstrs; typ_kind; typ_manifest; typ_params; _} =
 
 let type_declarations sub (_, list) = List.iter (sub.type_declaration sub) list
 
-let type_extension sub {tyext_constructors; tyext_params; _} =
+let type_extension sub {tyext_constructors; tyext_params; tyext_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub tyext_attributes;
   List.iter (fun (c, _) -> sub.typ sub c) tyext_params;
   List.iter (sub.extension_constructor sub) tyext_constructors
 
-let type_exception sub {tyexn_constructor; _} =
+let type_exception sub {tyexn_constructor; tyexn_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub tyexn_attributes;
   sub.extension_constructor sub tyexn_constructor
 
-let extension_constructor sub {ext_kind; _} =
+let extension_constructor sub {ext_kind; ext_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub ext_attributes;
   match ext_kind with
   | Text_decl (ctl, cto) ->
       constructor_args sub ctl;
@@ -156,7 +194,9 @@ let pat_extra sub (e, _loc, _attrs) = match e with
 
 let pat
   : type k . iterator -> k general_pattern -> unit
-  = fun sub {pat_extra = extra; pat_desc; pat_env; _} ->
+  = fun sub {pat_extra = extra; pat_desc; pat_env; pat_attributes; _} ->
+  (* [Typed_ppxlib] *)
+  sub.attributes sub pat_attributes;
   sub.env sub pat_env;
   List.iter (pat_extra sub) extra;
   match pat_desc with
@@ -175,8 +215,11 @@ let pat
   | Tpat_or (p1, p2, _) ->
       sub.pat sub p1;
       sub.pat sub p2
+  (* [Typed_ppxlib] *)
+  | Tpat_extension ext ->
+      sub.extension sub ext
 
-let expr sub {exp_extra; exp_desc; exp_env; _} =
+let expr sub {exp_extra; exp_desc; exp_env; exp_attributes; _} =
   let extra = function
     | Texp_constraint cty -> sub.typ sub cty
     | Texp_coerce (cty1, cty2) ->
@@ -185,6 +228,8 @@ let expr sub {exp_extra; exp_desc; exp_env; _} =
     | Texp_newtype _ -> ()
     | Texp_poly cto -> Option.iter (sub.typ sub) cto
   in
+  (* [Typed_ppxlib] *)
+  sub.attributes sub exp_attributes;
   List.iter (fun (e, _, _) -> extra e) exp_extra;
   sub.env sub exp_env;
   match exp_desc with
@@ -259,6 +304,9 @@ let expr sub {exp_extra; exp_desc; exp_env; _} =
   | Texp_open (od, e) ->
       sub.open_declaration sub od;
       sub.expr sub e
+  (* [Typed_ppxlib] *)
+  | Texp_extension ext ->
+      sub.extension sub ext
 
 
 let package_type sub {pack_fields; _} =
@@ -282,11 +330,15 @@ let signature_item sub {sig_desc; sig_env; _} =
   | Tsig_modsubst x -> sub.module_substitution sub x
   | Tsig_recmodule list -> List.iter (sub.module_declaration sub) list
   | Tsig_modtype x -> sub.module_type_declaration sub x
-  | Tsig_include incl -> include_infos (sub.module_type sub) incl
+  | Tsig_include incl -> include_infos sub (sub.module_type sub) incl
   | Tsig_class list -> List.iter (sub.class_description sub) list
   | Tsig_class_type list -> List.iter (sub.class_type_declaration sub) list
   | Tsig_open od -> sub.open_description sub od
-  | Tsig_attribute _ -> ()
+  (* [Typed_ppxlib] *)
+  | Tsig_attribute attr -> sub.attribute sub attr 
+  | Tsig_extension (ext, attrs) ->
+      sub.attributes sub attrs;
+      sub.extension sub ext
 
 let class_description sub x =
   class_infos sub (sub.class_type sub) x
@@ -295,7 +347,9 @@ let functor_parameter sub = function
   | Unit -> ()
   | Named (_, _, mtype) -> sub.module_type sub mtype
 
-let module_type sub {mty_desc; mty_env; _} =
+let module_type sub {mty_desc; mty_env; mty_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub mty_attributes;
   sub.env sub mty_env;
   match mty_desc with
   | Tmty_ident _      -> ()
@@ -308,6 +362,9 @@ let module_type sub {mty_desc; mty_env; _} =
       sub.module_type sub mtype;
       List.iter (fun (_, _, e) -> sub.with_constraint sub e) list
   | Tmty_typeof mexpr -> sub.module_expr sub mexpr
+  (* [Typed_ppxlib] *)
+  | Tmty_extension ext ->
+      sub.extension sub ext
 
 let with_constraint sub = function
   | Twith_type      decl -> sub.type_declaration sub decl
@@ -315,9 +372,14 @@ let with_constraint sub = function
   | Twith_module    _    -> ()
   | Twith_modsubst  _    -> ()
 
-let open_description sub {open_env; _} = sub.env sub open_env
+let open_description sub {open_env; open_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub open_attributes;
+  sub.env sub open_env
 
-let open_declaration sub {open_expr; open_env; _} =
+let open_declaration sub {open_expr; open_env; open_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub open_attributes; 
   sub.module_expr sub open_expr;
   sub.env sub open_env
 
@@ -334,7 +396,9 @@ let module_coercion sub = function
       List.iter (fun (_, _ ,c) -> sub.module_coercion sub c) l2
   | Tcoerce_primitive {pc_env; _} -> sub.env sub pc_env
 
-let module_expr sub {mod_desc; mod_env; _} =
+let module_expr sub {mod_desc; mod_env; mod_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub mod_attributes;
   sub.env sub mod_env;
   match mod_desc with
   | Tmod_ident _      -> ()
@@ -354,10 +418,18 @@ let module_expr sub {mod_desc; mod_env; _} =
       sub.module_type sub mtype;
       sub.module_coercion sub c
   | Tmod_unpack (exp, _) -> sub.expr sub exp
+  (* [Typed_ppxlib] *)
+  | Tmod_extension ext ->
+      sub.extension sub ext
 
-let module_binding sub {mb_expr; _} = sub.module_expr sub mb_expr
+let module_binding sub {mb_expr; mb_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub mb_attributes;
+  sub.module_expr sub mb_expr
 
-let class_expr sub {cl_desc; cl_env; _} =
+let class_expr sub {cl_desc; cl_env; cl_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub cl_attributes;
   sub.env sub cl_env;
   match cl_desc with
   | Tcl_constraint (cl, clty, _, _, _) ->
@@ -379,8 +451,13 @@ let class_expr sub {cl_desc; cl_env; _} =
   | Tcl_open (od, e) ->
       sub.open_description sub od;
       sub.class_expr sub e
+  (* [Typed_ppxlib] *)
+  | Tcl_extension ext ->
+      sub.extension sub ext
 
-let class_type sub {cltyp_desc; cltyp_env; _} =
+let class_type sub {cltyp_desc; cltyp_env; cltyp_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub cltyp_attributes;
   sub.env sub cltyp_env;
   match cltyp_desc with
   | Tcty_signature csg -> sub.class_signature sub csg
@@ -391,12 +468,17 @@ let class_type sub {cltyp_desc; cltyp_env; _} =
   | Tcty_open (od, e) ->
       sub.open_description sub od;
       sub.class_type sub e
+  (* [Typed_ppxlib] *)
+  | Tcty_extension ext ->
+      sub.extension sub ext
 
 let class_signature sub {csig_self; csig_fields; _} =
   sub.typ sub csig_self;
   List.iter (sub.class_type_field sub) csig_fields
 
-let class_type_field sub {ctf_desc; _} =
+let class_type_field sub {ctf_desc; ctf_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub ctf_attributes;
   match ctf_desc with
   | Tctf_inherit ct -> sub.class_type sub ct
   | Tctf_val (_, _, _, ct) ->  sub.typ sub ct
@@ -404,9 +486,14 @@ let class_type_field sub {ctf_desc; _} =
   | Tctf_constraint  (ct1, ct2) ->
       sub.typ sub ct1;
       sub.typ sub ct2
-  | Tctf_attribute _ -> ()
+  | Tctf_attribute attr -> sub.attribute sub attr
+  (* [Typed_ppxlib] *)
+  | Tctf_extension ext ->
+      sub.extension sub ext
 
-let typ sub {ctyp_desc; ctyp_env; _} =
+let typ sub {ctyp_desc; ctyp_env; ctyp_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub ctyp_attributes;
   sub.env sub ctyp_env;
   match ctyp_desc with
   | Ttyp_any   -> ()
@@ -422,17 +509,24 @@ let typ sub {ctyp_desc; ctyp_env; _} =
   | Ttyp_variant (list, _, _) -> List.iter (sub.row_field sub) list
   | Ttyp_poly (_, ct) -> sub.typ sub ct
   | Ttyp_package pack -> sub.package_type sub pack
+  (* [Typed_ppxlib] *)
+  | Ttyp_extension ext ->
+      sub.extension sub ext
 
 let class_structure sub {cstr_self; cstr_fields; _} =
   sub.pat sub cstr_self;
   List.iter (sub.class_field sub) cstr_fields
 
-let row_field sub {rf_desc; _} =
+let row_field sub {rf_desc; rf_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub rf_attributes;
   match rf_desc with
   | Ttag (_, _, list) -> List.iter (sub.typ sub) list
   | Tinherit ct -> sub.typ sub ct
 
-let object_field sub {of_desc; _} =
+let object_field sub {of_desc; of_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub of_attributes;
   match of_desc with
   | OTtag (_, ct) -> sub.typ sub ct
   | OTinherit ct -> sub.typ sub ct
@@ -441,7 +535,10 @@ let class_field_kind sub = function
   | Tcfk_virtual ct -> sub.typ sub ct
   | Tcfk_concrete (_, e) -> sub.expr sub e
 
-let class_field sub {cf_desc; _} = match cf_desc with
+let class_field sub {cf_desc; cf_attributes; _} = 
+  (* [Typed_ppxlib] *)
+  sub.attributes sub cf_attributes;
+  match cf_desc with
   | Tcf_inherit (_, cl, _, _, _) -> sub.class_expr sub cl
   | Tcf_constraint (cty1, cty2) ->
       sub.typ sub cty1;
@@ -449,7 +546,10 @@ let class_field sub {cf_desc; _} = match cf_desc with
   | Tcf_val (_, _, _, k, _) -> class_field_kind sub k
   | Tcf_method (_, _, k) -> class_field_kind sub k
   | Tcf_initializer exp -> sub.expr sub exp
-  | Tcf_attribute _ -> ()
+  | Tcf_attribute attr -> sub.attribute sub attr
+  (* [Typed_ppxlib] *)
+  | Tcf_extension ext ->
+      sub.extension sub ext
 
 let value_bindings sub (_, list) = List.iter (sub.value_binding sub) list
 
@@ -458,7 +558,9 @@ let case sub {c_lhs; c_guard; c_rhs} =
   Option.iter (sub.expr sub) c_guard;
   sub.expr sub c_rhs
 
-let value_binding sub {vb_pat; vb_expr; _} =
+let value_binding sub {vb_pat; vb_expr; vb_attributes; _} =
+  (* [Typed_ppxlib] *)
+  sub.attributes sub vb_attributes;
   sub.pat sub vb_pat;
   sub.expr sub vb_expr
 
@@ -507,4 +609,8 @@ let default_iterator =
     value_bindings;
     value_description;
     with_constraint;
+    (* [Typed_ppxlib] *)
+    extension;
+    attribute;
+    attributes;
   }

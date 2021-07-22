@@ -63,6 +63,10 @@ type iterator =
     value_bindings: iterator -> (rec_flag * value_binding list) -> unit;
     value_description: iterator -> value_description -> unit;
     with_constraint: iterator -> with_constraint -> unit;
+    (* [Typed_ppxlib] *)
+    extension: iterator -> extension -> unit;
+    attribute: iterator -> attribute -> unit;
+    attributes: iterator -> attribute list -> unit;
   }
 
 val default_iterator: iterator

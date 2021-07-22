@@ -66,6 +66,10 @@ type mapper =
       (rec_flag * value_binding list);
     value_description: mapper -> value_description -> value_description;
     with_constraint: mapper -> with_constraint -> with_constraint;
+    (* [Typed_ppxlib] *)
+    extension: mapper -> extension -> extension;
+    attribute: mapper -> attribute -> attribute;
+    attributes: mapper -> attribute list -> attribute list;
   }
 
 
