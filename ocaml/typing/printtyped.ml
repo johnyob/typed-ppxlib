@@ -162,6 +162,11 @@ let record_representation i ppf = let open Types in function
   | Record_inlined i -> line i ppf "Record_inlined %d\n" i
   | Record_extension p -> line i ppf "Record_extension %a\n" fmt_path p
 
+(* [Typed_ppxlib] *)
+let extension i ppf (name, payload) = 
+  line i ppf "%s\n" name.txt;
+  Printast.payload i ppf payload
+
 let attribute i ppf k a =
   line i ppf "%s \"%s\"\n" k a.Parsetree.attr_name.txt;
   Printast.payload i ppf a.Parsetree.attr_payload
@@ -221,6 +226,10 @@ let rec core_type i ppf x =
   | Ttyp_package { pack_path = s; pack_fields = l } ->
       line i ppf "Ttyp_package %a\n" fmt_path s;
       list i package_with ppf l;
+  (* [Typed_ppxlib] *)
+  | Ttyp_extension ext ->
+      line i ppf "Ttyp_extension\n";
+      extension i ppf ext
 
 and package_with i ppf (s, t) =
   line i ppf "with type %a\n" fmt_longident s;
@@ -270,6 +279,9 @@ and pattern : type k . _ -> _ -> k general_pattern -> unit = fun i ppf x ->
       line i ppf "Tpat_or\n";
       pattern i ppf p1;
       pattern i ppf p2;
+  | Tpat_extension ext ->
+      line i ppf "Tpat_extension\n";
+      extension i ppf ext
 
 and pattern_extra i ppf (extra_pat, _, attrs) =
   match extra_pat with
@@ -436,6 +448,10 @@ and expression i ppf x =
       module_expr i ppf o.open_expr;
       attributes i ppf o.open_attributes;
       expression i ppf e;
+  (* [Typed_ppxlib] *)
+  | Texp_extension ext ->
+      line i ppf "Texp_extension\n";
+      extension i ppf ext
 
 and value_description i ppf x =
   line i ppf "value_description %a %a\n" fmt_ident x.val_id fmt_location
@@ -537,6 +553,10 @@ and class_type i ppf x =
         fmt_override_flag o.open_override
         fmt_path (fst o.open_expr);
       class_type i ppf e
+  (* [Typed_ppxlib] *)
+  | Tcty_extension ext ->
+      line i ppf "Tcty_extension\n";
+      extension i ppf ext
 
 and class_signature i ppf { csig_self = ct; csig_fields = l } =
   line i ppf "class_signature\n";
@@ -565,6 +585,10 @@ and class_type_field i ppf x =
       core_type (i+1) ppf ct2;
   | Tctf_attribute a ->
       attribute i ppf "Tctf_attribute" a
+  (* [Typed_ppxlib] *)
+  | Tctf_extension ext ->
+      line i ppf "Tctf_extension\n";
+      extension i ppf ext
 
 and class_description i ppf x =
   line i ppf "class_description %a\n" fmt_location x.ci_loc;
@@ -622,6 +646,10 @@ and class_expr i ppf x =
         fmt_override_flag o.open_override
         fmt_path (fst o.open_expr);
       class_expr i ppf e
+  (* [Typed_ppxlib] *)
+  | Tcl_extension ext ->
+      line i ppf "Tcl_extension\n";
+      extension i ppf ext
 
 and class_structure i ppf { cstr_self = p; cstr_fields = l } =
   line i ppf "class_structure\n";
@@ -652,6 +680,10 @@ and class_field i ppf x =
       expression (i+1) ppf e;
   | Tcf_attribute a ->
       attribute i ppf "Tcf_attribute" a
+  (* [Typed_ppxlib] *)
+  | Tcf_extension ext ->
+      line i ppf "Tcf_extension\n";
+      extension i ppf ext
 
 and class_field_kind i ppf = function
   | Tcfk_concrete (o, e) ->
@@ -695,6 +727,10 @@ and module_type i ppf x =
   | Tmty_typeof m ->
       line i ppf "Tmty_typeof\n";
       module_expr i ppf m;
+  (* [Typed_ppxlib] *)
+  | Tmty_extension ext ->
+      line i ppf "Tmty_extension\n";
+      extension i ppf ext
 
 and signature i ppf x = list i signature_item ppf x.sig_items
 
@@ -749,6 +785,12 @@ and signature_item i ppf x =
       list i class_type_declaration ppf l;
   | Tsig_attribute a ->
       attribute i ppf "Tsig_attribute" a
+  (* [Typed_ppxlib] *)
+  | Tsig_extension (ext, attrs) ->
+      line i ppf "Tsig_extension\n";
+      extension i ppf ext;
+      attributes i ppf attrs
+
 
 and module_declaration i ppf md =
   line i ppf "%a" fmt_modname md.md_id;
@@ -803,6 +845,10 @@ and module_expr i ppf x =
   | Tmod_unpack (e, _) ->
       line i ppf "Tmod_unpack\n";
       expression i ppf e;
+  (* [Typed_ppxlib] *)
+  | Tmod_extension ext ->
+      line i ppf "Tmod_extension\n";
+      extension i ppf ext
 
 and structure i ppf x = list i structure_item ppf x.str_items
 
@@ -856,6 +902,12 @@ and structure_item i ppf x =
       module_expr i ppf incl.incl_mod;
   | Tstr_attribute a ->
       attribute i ppf "Tstr_attribute" a
+  (* [Typed_ppxlib] *)
+  | Tstr_extension (ext, attrs) ->
+      line i ppf "Tstr_extension\n";
+      extension i ppf ext;
+      attributes i ppf attrs
+
 
 and longident_x_with_constraint i ppf (li, _, wc) =
   line i ppf "%a\n" fmt_path li;
