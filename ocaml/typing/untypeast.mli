@@ -75,6 +75,7 @@ type mapper = {
   with_constraint:
     mapper -> (Path.t * Longident.t Location.loc * Typedtree.with_constraint)
     -> with_constraint;
+  extension: mapper -> Typedtree.extension -> extension;
 }
 
 val default_mapper : mapper

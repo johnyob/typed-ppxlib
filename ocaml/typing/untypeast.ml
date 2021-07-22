@@ -71,6 +71,8 @@ type mapper = {
   with_constraint:
     mapper -> (Path.t * Longident.t Location.loc * T.with_constraint)
     -> with_constraint;
+  (* [Typed_ppxlib] *)
+  extension: mapper -> T.extension -> extension;
 }
 
 open T
@@ -201,6 +203,9 @@ let structure_item sub item =
         Pstr_include (sub.include_declaration sub incl)
     | Tstr_attribute x ->
         Pstr_attribute x
+    (* [Typed_ppxlib] *)
+    | Tstr_extension (ext, attrs) -> 
+        Pstr_extension (ext, attrs)
   in
   Str.mk ~loc desc
 
@@ -351,6 +356,8 @@ let pattern : type k . _ -> k T.general_pattern -> _ = fun sub pat ->
     | Tpat_exception p -> Ppat_exception (sub.pat sub p)
     | Tpat_value p -> (sub.pat sub (p :> pattern)).ppat_desc
     | Tpat_or (p1, p2, _) -> Ppat_or (sub.pat sub p1, sub.pat sub p2)
+    (* [Typed_ppxlib] *)
+    | Tpat_extension ext -> Ppat_extension ext
   in
   Pat.mk ~loc ~attrs desc
 
@@ -503,6 +510,9 @@ let expression sub exp =
                              ])
     | Texp_open (od, exp) ->
         Pexp_open (sub.open_declaration sub od, sub.expr sub exp)
+    (* [Typed_ppxlib] *)
+    | Texp_extension ext ->
+        Pexp_extension ext
   in
   List.fold_right (exp_extra sub) exp.exp_extra
     (Exp.mk ~loc ~attrs desc)
@@ -561,6 +571,9 @@ let signature_item sub item =
         Psig_class_type (List.map (sub.class_type_declaration sub) list)
     | Tsig_attribute x ->
         Psig_attribute x
+    (* [Typed_ppxlib] *)
+    | Tsig_extension (ext, attrs) ->
+        Psig_extension (ext, attrs)
   in
   Sig.mk ~loc desc
 
@@ -619,6 +632,9 @@ let module_type sub mty =
           List.map (sub.with_constraint sub) list)
     | Tmty_typeof mexpr ->
         Pmty_typeof (sub.module_expr sub mexpr)
+    (* [Typed_ppxlib] *)
+    | Tmty_extension ext ->
+        Pmty_extension ext
   in
   Mty.mk ~loc ~attrs desc
 
@@ -656,6 +672,9 @@ let module_expr sub mexpr =
           | Tmod_unpack (exp, _pack) ->
               Pmod_unpack (sub.expr sub exp)
               (* TODO , sub.package_type sub pack) *)
+          (* [Typed_ppxlib] *)
+          | Tmod_extension ext ->
+              Pmod_extension ext
         in
         Mod.mk ~loc ~attrs desc
 
@@ -693,6 +712,9 @@ let class_expr sub cexpr =
 
     | Tcl_ident _ -> assert false
     | Tcl_constraint (_, None, _, _, _) -> assert false
+    (* [Typed_ppxlib] *)
+    | Tcl_extension ext -> 
+        Pcl_extension ext
   in
   Cl.mk ~loc ~attrs desc
 
@@ -707,6 +729,9 @@ let class_type sub ct =
         Pcty_arrow (label, sub.typ sub ct, sub.class_type sub cl)
     | Tcty_open (od, e) ->
         Pcty_open (sub.open_description sub od, sub.class_type sub e)
+    (* [Typed_ppxlib] *)
+    | Tcty_extension ext ->
+        Pcty_extension ext
   in
   Cty.mk ~loc ~attrs desc
 
@@ -728,6 +753,9 @@ let class_type_field sub ctf =
     | Tctf_constraint  (ct1, ct2) ->
         Pctf_constraint (sub.typ sub ct1, sub.typ sub ct2)
     | Tctf_attribute x -> Pctf_attribute x
+    (* [Typed_ppxlib] *)
+    | Tctf_extension ext ->
+        Pctf_extension ext
   in
   Ctf.mk ~loc ~attrs desc
 
@@ -756,6 +784,9 @@ let core_type sub ct =
         let list = List.map (fun v -> mkloc v loc) list in
         Ptyp_poly (list, sub.typ sub ct)
     | Ttyp_package pack -> Ptyp_package (sub.package_type sub pack)
+    (* [Typed_ppxlib] *)
+    | Ttyp_extension ext ->
+        Ptyp_extension ext
   in
   Typ.mk ~loc ~attrs desc
 
@@ -829,10 +860,16 @@ let class_field sub cf =
         let exp = remove_fun_self exp in
         Pcf_initializer (sub.expr sub exp)
     | Tcf_attribute x -> Pcf_attribute x
+    (* [Typed_ppxlib] *)
+    | Tcf_extension ext ->
+        Pcf_extension ext
   in
   Cf.mk ~loc ~attrs desc
 
 let location _sub l = l
+
+(* [Typed_ppxlib] *)
+let extension _sub ext = ext
 
 let default_mapper =
   {
@@ -880,6 +917,8 @@ let default_mapper =
     location = location;
     row_field = row_field ;
     object_field = object_field ;
+    (* [Typed_ppxlib] *)
+    extension = extension;
   }
 
 let untype_structure ?(mapper=default_mapper) structure =
