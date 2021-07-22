@@ -32,6 +32,13 @@ type partial = Partial | Total
 type attribute = Parsetree.attribute
 type attributes = attribute list
 
+(** Added by [Typed_ppxlib]. [Typed_ppxlib] augments the [Typedtree] structure
+    to contain attributes *and* extensions. This allows for idiomatic type-based
+    filtering. Once the ppx pass is complete, we transform back into [Parsetree].
+*)
+type extension = Parsetree.extension
+type payload = Parsetree.payload
+
 (** {1 Core language} *)
 
 type value = Value_pattern
@@ -142,6 +149,9 @@ and 'k pattern_desc =
             [row_desc] = [Some _] when translating [Ppat_type _],
                          [None] otherwise.
          *)
+  (* [Typed_ppxlib] *)
+  | Tpat_extension : extension -> value pattern_desc
+  (* TODO: Research this type more to determine a more generic type *)
 
 and tpat_value_argument = private value general_pattern
 
@@ -275,6 +285,9 @@ and expression_desc =
   | Texp_extension_constructor of Longident.t loc * Path.t
   | Texp_open of open_declaration * expression
         (** let open[!] M in e *)
+  (* [Typed_ppxlib] *)
+  | Texp_extension of extension
+  (* [%id] *)
 
 and meth =
     Tmeth_name of string
@@ -327,6 +340,8 @@ and class_expr_desc =
       class_expr * class_type option * string list * string list * Types.Concr.t
   (* Visible instance variables, methods and concrete methods *)
   | Tcl_open of open_description * class_expr
+  (* [Typed_ppxlib] *)
+  | Tcl_extension of extension
 
 and class_structure =
   {
@@ -357,6 +372,8 @@ and class_field_desc =
   | Tcf_constraint of core_type * core_type
   | Tcf_initializer of expression
   | Tcf_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tcf_extension of extension
 
 (* Value expressions for the module language *)
 
@@ -390,6 +407,8 @@ and module_expr_desc =
         (ME : MT)   (constraint = Tmodtype_explicit MT)
      *)
   | Tmod_unpack of expression * Types.module_type
+  (* [Typed_ppxlib] *)
+  | Tmod_extension of extension
 
 and structure = {
   str_items : structure_item list;
@@ -418,6 +437,8 @@ and structure_item_desc =
   | Tstr_class_type of (Ident.t * string loc * class_type_declaration) list
   | Tstr_include of include_declaration
   | Tstr_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tstr_extension of extension * attributes
 
 and module_binding =
     {
@@ -460,6 +481,8 @@ and module_type_desc =
   | Tmty_with of module_type * (Path.t * Longident.t loc * with_constraint) list
   | Tmty_typeof of module_expr
   | Tmty_alias of Path.t * Longident.t loc
+  (* [Typed_ppxlib] *)
+  | Tmty_extension of extension
 
 and primitive_coercion =
   {
@@ -495,6 +518,8 @@ and signature_item_desc =
   | Tsig_class of class_description list
   | Tsig_class_type of class_type_declaration list
   | Tsig_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tsig_extension of extension * attributes
 
 and module_declaration =
     {
@@ -580,6 +605,8 @@ and core_type_desc =
   | Ttyp_variant of row_field list * closed_flag * label list option
   | Ttyp_poly of string list * core_type
   | Ttyp_package of package_type
+  (* [Typed_ppxlib] *)
+  | Ttyp_extension of extension
 
 and package_type = {
   pack_path : Path.t;
@@ -708,6 +735,8 @@ and class_type_desc =
   | Tcty_signature of class_signature
   | Tcty_arrow of arg_label * core_type * class_type
   | Tcty_open of open_description * class_type
+  (* [Typed_ppxlib] *)
+  | Tcty_extension of extension
 
 and class_signature = {
     csig_self : core_type;
@@ -727,6 +756,8 @@ and class_type_field_desc =
   | Tctf_method of (string * private_flag * virtual_flag * core_type)
   | Tctf_constraint of (core_type * core_type)
   | Tctf_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tctf_extension of extension
 
 and class_declaration =
   class_expr class_infos

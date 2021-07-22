@@ -25,6 +25,9 @@ type partial = Partial | Total
 type attribute = Parsetree.attribute
 type attributes = attribute list
 
+type extension = Parsetree.extension
+type payload = Parsetree.payload
+
 type value = Value_pattern
 type computation = Computation_pattern
 
@@ -77,6 +80,8 @@ and 'k pattern_desc =
   | Tpat_or :
       'k general_pattern * 'k general_pattern * row_desc option ->
       'k pattern_desc
+  (* [Typed_ppxlib] *)
+  | Tpat_extension : extension -> value pattern_desc
 
 and tpat_value_argument = value general_pattern
 
@@ -146,7 +151,9 @@ and expression_desc =
   | Texp_unreachable
   | Texp_extension_constructor of Longident.t loc * Path.t
   | Texp_open of open_declaration * expression
-
+  (* [Typed_ppxlib] *)
+  | Texp_extension of extension
+  
 and meth =
     Tmeth_name of string
   | Tmeth_val of Ident.t
@@ -196,7 +203,9 @@ and class_expr_desc =
       class_expr * class_type option * string list * string list * Concr.t
     (* Visible instance variables, methods and concrete methods *)
   | Tcl_open of open_description * class_expr
-
+  (* [Typed_ppxlib] *)
+  | Tcl_extension of extension
+  
 and class_structure =
   {
    cstr_self: pattern;
@@ -226,6 +235,8 @@ and class_field_desc =
   | Tcf_constraint of core_type * core_type
   | Tcf_initializer of expression
   | Tcf_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tcf_extension of extension
 
 (* Value expressions for the module language *)
 
@@ -253,6 +264,8 @@ and module_expr_desc =
   | Tmod_constraint of
       module_expr * Types.module_type * module_type_constraint * module_coercion
   | Tmod_unpack of expression * Types.module_type
+  (* [Typed_ppxlib] *)
+  | Tmod_extension of extension
 
 and structure = {
   str_items : structure_item list;
@@ -281,6 +294,8 @@ and structure_item_desc =
   | Tstr_class_type of (Ident.t * string loc * class_type_declaration) list
   | Tstr_include of include_declaration
   | Tstr_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tstr_extension of extension * attributes
 
 and module_binding =
     {
@@ -323,6 +338,8 @@ and module_type_desc =
   | Tmty_with of module_type * (Path.t * Longident.t loc * with_constraint) list
   | Tmty_typeof of module_expr
   | Tmty_alias of Path.t * Longident.t loc
+  (* [Typed_ppxlib] *)
+  | Tmty_extension of extension
 
 (* Keep primitive type information for type-based lambda-code specialization *)
 and primitive_coercion =
@@ -359,6 +376,8 @@ and signature_item_desc =
   | Tsig_class of class_description list
   | Tsig_class_type of class_type_declaration list
   | Tsig_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tsig_extension of extension * attributes
 
 and module_declaration =
     {
@@ -442,6 +461,8 @@ and core_type_desc =
   | Ttyp_variant of row_field list * closed_flag * label list option
   | Ttyp_poly of string list * core_type
   | Ttyp_package of package_type
+  (* [Typed_ppxlib] *)
+  | Ttyp_extension of extension
 
 and package_type = {
   pack_path : Path.t;
@@ -569,6 +590,8 @@ and class_type_desc =
   | Tcty_signature of class_signature
   | Tcty_arrow of arg_label * core_type * class_type
   | Tcty_open of open_description * class_type
+  (* [Typed_ppxlib] *)
+  | Tcty_extension of extension
 
 and class_signature = {
     csig_self: core_type;
@@ -588,6 +611,8 @@ and class_type_field_desc =
   | Tctf_method of (string * private_flag * virtual_flag * core_type)
   | Tctf_constraint of (core_type * core_type)
   | Tctf_attribute of attribute
+  (* [Typed_ppxlib] *)
+  | Tctf_extension of extension
 
 and class_declaration =
   class_expr class_infos
@@ -647,6 +672,8 @@ let rec classify_pattern_desc : type k . k pattern_desc -> k pattern_category =
      | Computation, Computation -> Computation
      end
 
+  | Tpat_extension _ -> Value
+
 and classify_pattern
   : type k . k general_pattern -> k pattern_category
   = fun pat ->
@@ -671,6 +698,7 @@ let shallow_iter_pattern_desc
   | Tpat_value p -> f.f p
   | Tpat_exception p -> f.f p
   | Tpat_or(p1, p2, _) -> f.f p1; f.f p2
+  | Tpat_extension _ -> ()
 
 type pattern_transformation =
   { f : 'k . 'k general_pattern -> 'k general_pattern }
@@ -698,6 +726,7 @@ let shallow_map_pattern_desc
   | Tpat_exception p -> Tpat_exception (f.f p)
   | Tpat_or (p1,p2,path) ->
       Tpat_or (f.f p1, f.f p2, path)
+  | Tpat_extension _ -> d
 
 let rec iter_general_pattern
   : type k . pattern_action -> k general_pattern -> unit
