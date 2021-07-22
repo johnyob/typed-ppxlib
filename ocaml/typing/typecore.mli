@@ -237,7 +237,7 @@ type recarg =
     of the function.  
 *)
 (** TODO: Understand the [recarg] labelled argument. *)
-val typed_ppxlib_expect_ref : (
+(* val typed_ppxlib_expect_ref : (
   ?in_function:(Location.t * type_expr) ->
   ?recarg:recarg ->
   Env.t ->
@@ -268,4 +268,4 @@ val typed_ppxlib_expression_extension_ref : (
 
 
 val typed_ppxlib_pattern_extension_ref : typed_ppxlib_pattern_extension ref
-
+ *)

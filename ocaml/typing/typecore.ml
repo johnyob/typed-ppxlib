@@ -138,51 +138,6 @@ type recarg =
   | Required
   | Rejected
 
-(* Typed_ppxlib.
-
-   This section defines the forward declarations of the typed ppxlib hooks, applied to extensions / attributes during 
-   type checking.
-*)
-
-(* TODO: Remove duplicate pattern *)
-type typed_ppxlib_pattern_extension =
-  { f :
-    'k 'r.
-    'k Typedtree.pattern_category
-    -> no_existentials:existential_restriction option
-    -> env:Env.t ref
-    -> expected:type_expr
-    -> cnt:('k Typedtree.general_pattern -> 'r)
-    -> Parsetree.extension
-    -> 'r
-  }
-
-let typed_ppxlib_expect_ref = ref (fun ?in_function:_ ?recarg:_ _ -> assert false)
-let typed_ppxlib_expression_extension_ref = 
-  ref (fun ?in_function:_ ~recarg:_ ~env:_ ~expected:_ ext -> 
-    raise (Error_forward (Builtin_attributes.error_of_extension ext))
-    : ?in_function:(Location.t * type_expr) ->
-      recarg:recarg ->
-      env:Env.t ->
-      expected:type_expected ->
-      Parsetree.extension ->
-      Typedtree.expression)
-
-let typed_ppxlib_pattern_extension_ref =
-  let f : type k r . 
-    k pattern_category 
-    -> no_existentials:existential_restriction option 
-    -> env:Env.t ref 
-    -> expected:type_expr 
-    -> cnt:(k general_pattern -> r) 
-    -> extension 
-    -> r 
-    = fun  _ ~no_existentials:_ ~env:_ ~expected:_ ~cnt:_ ext -> raise (Error_forward (Builtin_attributes.error_of_extension ext)) in
-  ref ({ f })
-
-(* Typed_ppxlib end*)
-
-
 (* Forward declaration, to be filled in by Typemod.type_module *)
 
 let type_module =
@@ -577,6 +532,8 @@ and build_as_type_aux env p =
       end
   | Tpat_any | Tpat_var _ | Tpat_constant _
   | Tpat_array _ | Tpat_lazy _ -> p.pat_type
+  (* [Typed_ppxlib] *)
+  | Tpat_extension _ -> p.pat_type
 
 let build_or_pat env loc lid =
   let path, decl = Env.lookup_type ~loc:lid.loc lid.txt env in
@@ -1907,8 +1864,17 @@ and type_pat_aux
         pat_env = !env;
         pat_attributes = sp.ppat_attributes;
       })
+  (* [Typed_ppxlib] *)
   | Ppat_extension ext ->
-     !typed_ppxlib_pattern_extension_ref.f category ~no_existentials ~env ~expected:expected_ty ~cnt:k ext
+      (* Return the value pattern for the extension *)
+      rvp k {
+        pat_desc = Tpat_extension ext;
+        pat_loc = loc; pat_extra=[];
+        pat_type = instance expected_ty;
+        pat_attributes = sp.ppat_attributes;
+        pat_env = !env 
+      }
+      
 
 let type_pat category ?no_existentials ?(mode=Normal)
     ?(lev=get_current_level()) env sp expected_ty =
@@ -2174,7 +2140,12 @@ let rec is_nonexpansive exp =
           | Tcf_initializer e -> is_nonexpansive e
           | Tcf_constraint _ -> true
           | Tcf_inherit _ -> false
-          | Tcf_attribute _ -> true)
+          | Tcf_attribute _ -> true
+          (* [Typed_ppxlib] 
+             Similarly, an extension may be expanded into a initializer / value / etc,
+             resulting in observable side-effects.
+          *)
+          | Tcf_extension _ -> false)
         fields &&
       Vars.fold (fun _ (mut,_,_) b -> decr count; b && mut = Immutable)
         vars true &&
@@ -2210,6 +2181,13 @@ let rec is_nonexpansive exp =
   | Texp_letop _
   | Texp_extension_constructor _ ->
     false
+  (* [Typed_ppxlib] 
+     Non-expansive expressions are defined as those with no *observable* side-effects.
+     Since an extension can be arbitrarily expanded into an expression w/ side-effects 
+     => extensions are expansive
+  *)
+  | Texp_extension _ ->
+    false
 
 and is_nonexpansive_mod mexp =
   match mexp.mod_desc with
@@ -2241,9 +2219,13 @@ and is_nonexpansive_mod mexp =
                 te.tyext_constructors
           | Tstr_class _ -> false (* could be more precise *)
           | Tstr_attribute _ -> true
+          (* [Typed_ppxlib] *)
+          | Tstr_extension _ -> false (* TODO: is this sound? *)
         )
         str.str_items
   | Tmod_apply _ -> false
+  (* [Typed_ppxlib] *)
+  | Tmod_extension _ -> false
 
 and is_nonexpansive_opt = function
   | None -> true
@@ -2272,6 +2254,10 @@ let is_prim ~name funct =
   | Texp_ident (_, _, {val_kind=Val_prim{Primitive.prim_name; _}}) ->
       prim_name = name
   | _ -> false
+  (* [Typed_ppxlib] 
+     Extension may be expanded into a prim? 
+  *)
+
 (* Approximate the type of an expression, for better recursion *)
 
 let rec approx_type env sty =
@@ -2290,7 +2276,11 @@ let rec approx_type env sty =
       end
   | Ptyp_poly (_, sty) ->
       approx_type env sty
-  | _ -> newvar ()
+  | _ -> newvar () 
+  (* [Typed_ppxlib] 
+     [newvar ()] covers the case of [Ptyp_extension], since we cannot 
+     infer any type information from it.
+  *)
 
 let rec type_approx env sexp =
   match sexp.pexp_desc with
@@ -2325,6 +2315,10 @@ let rec type_approx env sexp =
       end;
       ty2
   | _ -> newvar ()
+  (* [Typed_ppxlib] 
+     [newvar ()] covers the case of [Pexp_extension], since we cannot 
+     infer any type information from it.
+  *)
 
 (* List labels in a function type, and whether return type is a variable *)
 let rec list_labels_aux env visited ls ty_fun =
@@ -2430,13 +2424,26 @@ let check_partial_application statement exp =
             | Texp_apply _ | Texp_send _ | Texp_new _ | Texp_letop _ ->
                 Location.prerr_warning exp_loc
                   Warnings.Ignored_partial_application
+            (* [Typed_ppxlib] 
+               We must check whether the the extension is a unit-statement. 
+               This is determined by the expected type of the extension. 
+
+               (Although I think this check is redundant since if we know (from context)
+                that the exp is a statement => has a unit type.
+                But better safe than sorry :)
+               )
+            *)
+            | Texp_extension _ -> check_statement ()
           end
         in
         check exp
     | Tvar _, _ ->
         if delay then add_delayed_check (fun () -> f false)
     | _ ->
-        check_statement ()
+        check_statement () 
+    (* [Typed_ppxlib]
+       See above
+    *)
   in
   f true
 
@@ -2608,8 +2615,7 @@ let rec type_exp ?recarg env sexp =
    In the principal case, [type_expected'] may be at generic_level.
  *)
 
-and type_expect ?in_function ?recarg env = !typed_ppxlib_expect_ref ?in_function ?recarg env
-and type_expect' ?in_function ?recarg env sexp ty_expected_explained =
+and type_expect ?in_function ?recarg env sexp ty_expected_explained =
   let previous_saved_types = Cmt_format.get_saved_types () in
   let exp =
     Builtin_attributes.warning_scope sexp.pexp_attributes
@@ -3750,7 +3756,11 @@ and type_expect_
       end
   | Pexp_extension ext ->
       (* typed_ppxlib *)
-      !typed_ppxlib_expression_extension_ref ?in_function ~recarg ~env ~expected:ty_expected_explained ext
+      re { exp_desc = Texp_extension ext;
+           exp_loc = loc; exp_extra = [];
+           exp_type = instance ty_expected;
+           exp_attributes = sexp.pexp_attributes;
+           exp_env = env }
   | Pexp_unreachable ->
       re { exp_desc = Texp_unreachable;
            exp_loc = loc; exp_extra = [];
@@ -5637,5 +5647,3 @@ let type_expect ?in_function env e ty = type_expect ?in_function env e ty
 let type_exp env e = type_exp env e
 let type_argument env e t1 t2 = type_argument env e t1 t2
 
-(* typed_ppxlib *)
-let () = typed_ppxlib_expect_ref := type_expect'

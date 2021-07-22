@@ -1914,6 +1914,13 @@ let rec unify_parents env ty cl =
   | Tcl_apply (cl, _)
   | Tcl_let (_, _, _, cl)
   | Tcl_constraint (cl, _, _, _, _) -> unify_parents env ty cl
+  (* [Typed_ppxlib] 
+     Unifying is equivalent to adding more constraints,
+     we wish to have the most general types (since we cannot infer any 
+     information from extensions) => no unifying!
+  *)
+  | Tcl_extension _ext ->
+      ()
 and unify_parents_struct env ty st =
   List.iter
     (function
